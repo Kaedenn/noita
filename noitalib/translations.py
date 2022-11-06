@@ -16,7 +16,8 @@ import csv
 import locale
 import os
 
-from .logger import logger
+import utility.loghelper
+logger = utility.loghelper.DelayLogger(__name__)
 
 TRANSLATIONS = "data/translations/common.csv"
 LANG_FALLBACK = "en"
@@ -191,5 +192,21 @@ class LanguageMap:
   def __call__(self, phrase, *insertions):
     "Alias for self.localize"
     return self.localize(phrase, *insertions)
+
+  # Noita-specific shorthand functions
+
+  def material(self, matid, with_as=False):
+    "Get the localized name of a material"
+    matstr = self.localize("$mat_" + matid)
+    if with_as and matstr != matid:
+      matstr += f" (as {matid})"
+    return matstr
+
+  def perk(self, perkid, count=1):
+    "Get the localized name of a perk"
+    perkstr = self.localize("$perk_" + perkid)
+    if count > 0:
+      perkstr += f" x{count}"
+    return perkstr
 
 # vim: set ts=2 sts=2 sw=2:

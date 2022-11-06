@@ -11,8 +11,9 @@ A "session" is a stats.xml file with, optionally, a kills.xml file.
 import datetime
 import os
 
+import utility.loghelper
 from . import xmltools
-from .logger import logger
+logger = utility.loghelper.DelayLogger(__name__)
 
 def session_get_time(stats_file):
   "Get the date and time the given session was played"

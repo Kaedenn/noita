@@ -21,9 +21,10 @@ utility.loghelper.tracelog.hotpatch(logging)
 # pylint: disable=wrong-import-position
 import noitalib
 import steam.paths
+from noitalib.translations import plural as Pl
 
 logging.basicConfig(
-    format="%(module)s:%(lineno)s: %(levelname)s: %(message)s",
+    format="%(name)s:%(lineno)s: %(levelname)s: %(message)s",
     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -125,65 +126,111 @@ def dump_language_map(langmap, mode, lang_override):
       notes = ttoken.notes
       print(f"{token} values={values!r} notes={notes!r}")
 
-def orb_to_string(orb_id, orb, langmap):
-  "Build a printable string for the given orb"
-  return orb.localize(langmap)
-  orb_pwdir, orb_pwnum = noitalib.orbs.get_orb_world(orb_id)
-  place = langmap(orb.place).title()
-  if orb_pwdir != noitalib.orbs.WORLD_MAIN:
-    if orb_pwdir == noitalib.orbs.WORLD_WEST:
-      pwtok = "$biome_west"
-    else:
-      pwtok = "$biome_east"
-    if orb_pwnum > 1:
-      place = langmap(pwtok, f"x{orb_pwnum} {place}")
-    else:
-      place = langmap(pwtok, place)
-    return place
-  return f"{langmap(orb.spell)} from {place}"
+def world_get_orbs(save_dir, wstate, langmap):
+  "Aggregate everything relating to orbs"
+  orbs_have = {oid: noitalib.orbs.get_orb(oid) for oid in wstate.orbs()}
+  orbs_need = [oid for oid in noitalib.orbs.ORBS if oid not in orbs_have]
+  orb_map_str = wstate.lua_globals().get("ORB_MAP_STRING")
+  orb_map = []
+  if orb_map_str:
+    for xy in orb_map_str.split():
+      xstr, ystr = xy.split(",")
+      orb_map.append((int(xstr), int(ystr)))
+
+  return {
+    "orbs_have": orbs_have,
+    "orbs_need": orbs_need,
+    "orb_map": orb_map
+  }
 
 def print_world(save_dir, wstate, langmap):
   "Print a WorldState"
   save_name = os.path.basename(save_dir)
   print(f"{save_name} - {len(wstate.orbs())} orbs")
-  # Orbs
-  orbs_have = {oid: noitalib.orbs.get_orb(oid) for oid in wstate.orbs()}
+
+  orb_info = world_get_orbs(save_dir, wstate, langmap)
+  orbs_have = orb_info["orbs_have"]
+  orbs_need = orb_info["orbs_need"]
+  orb_map = orb_info["orb_map"]
   for orb_id, orb in sorted(orbs_have.items()):
     label = orb.localize(langmap)
     print(f"\tCollected orb {orb_id}: {label}")
-  orbs_need = [oid for oid in noitalib.orbs.ORBS if oid not in orbs_have]
   for oid in sorted(orbs_need):
-    label = orb_to_string(oid, noitalib.orbs.ORBS[oid], langmap)
-    print(f"\tNeed orb {oid}: {label}")
-  # Fungal shifts
-  print(f"Fungal shifts: {len(list(wstate.shifts()))}")
-  for mat1, mat2 in wstate.shifts():
-    mat1str = langmap("$mat_" + mat1)
-    mat2str = langmap("$mat_" + mat2)
-    if mat1 != mat1str:
-      mat1str += f" (as {mat1})"
-    if mat2 != mat2str:
-      mat2str += f" (as {mat2})"
+    label = noitalib.orbs.ORBS[oid].localize(langmap)
+    if 0 <= oid < len(orb_map):
+      label += " at ({}, {})".format(*orb_map[oid])
+    print(f"\tNeed {label}")
+
+  shifts = list(wstate.shifts())
+  print(f"Fungal shifts: {len(shifts)}")
+  for mat1, mat2 in shifts:
+    mat1str = langmap.material(mat1)
+    mat2str = langmap.material(mat2)
     print(f"\t{mat1str} to {mat2str}")
+
   logger.debug("Lua global variables:")
   for vkey, vval in wstate.lua_globals().items():
     logger.debug("\t%s = %r", vkey, vval)
+
   logger.debug("Flags:\n%s", "\n".join(wstate.flags()))
+
   perks = wstate.perks()
   print(f"Perks: {len(perks)}")
   for perk_id, count in perks:
-    perk_name = langmap("$perk_" + perk_id)
-    if count > 1:
-      print(f"\t{perk_name} x{count}")
-    else:
-      print(f"\t{perk_name}")
+    print(f"\t{langmap.perk(perk_id, count)}")
 
 def get_loggers():
   "Get all of the loggers we care about"
   yield logger
-  yield noitalib.logger
+  for _, wrapper, _ in utility.loghelper.get_loggers():
+    yield wrapper
   yield steam.paths.logger
   yield steam.paths.acf.logger
+
+def configure_logging(ap, args):
+  "Configure logging based on the parsed command-line arguments"
+  log_level = None
+  if args.trace:
+    log_level = logging.TRACE # pylint: disable=no-member
+  elif args.verbose:
+    log_level = logging.DEBUG
+  elif args.warnings:
+    log_level = logging.WARNING
+  elif args.errors:
+    log_level = logging.ERROR
+  elif args.quiet:
+    log_level = logging.FATAL
+  if log_level is not None:
+    for inst in get_loggers():
+      inst.setLevel(log_level)
+
+  # Apply one-off logger configuration
+  if args.level:
+    for level_pair in args.level:
+      logger_name, level_code = level_pair.rsplit(":", 1)
+      if level_code not in LEVEL_CODES:
+        ap.error(f"invalid level {level_code}; choices are {LEVEL_CODES}")
+      utility.loghelper.apply_level(logger_name, level_code)
+
+def _main_show_world(save_dirs, langmap):
+  "Print information about the world"
+  for save_dir in save_dirs:
+    wfile = noitalib.world.get_world_file(save_dir)
+    if os.path.exists(wfile):
+      wstate = noitalib.world.WorldState(wfile)
+      print_world(save_dir, wstate, langmap)
+
+def _main_show_player(save_dirs, langmap):
+  "Print information about the player"
+  players = {}
+  for save_dir in save_dirs:
+    save_name = os.path.basename(save_dir)
+    if noitalib.player.has_player_file(save_dir):
+      pfile = noitalib.player.get_player_file(save_dir)
+      player = noitalib.player.Player(pfile)
+      players[save_name] = player
+      logger.debug("In %s: %r", save_dir, player)
+  logger.debug("Found %s", Pl(len(players), "player file"))
 
 def main():
   "Entry point"
@@ -217,7 +264,8 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
   ag.add_argument("--steam-appid", metavar="NUM",
       help="determine path via a specific App ID")
   ag = ap.add_argument_group("save selection")
-  ag.add_argument("--save", help="limit output to a specific save directory")
+  ag.add_argument("-S", "--save",
+      help="limit output to a specific save directory")
   ag = ap.add_argument_group("output behavior")
   ag.add_argument("--list-saves", action="store_true",
       help="display available save directories")
@@ -274,28 +322,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
       ap.error("--dump-i18n cannot be used with --no-i18n")
 
   # Configure all of the loggers to have the desired level, if given
-  log_level = None
-  if args.trace:
-    log_level = logging.TRACE # pylint: disable=no-member
-  elif args.verbose:
-    log_level = logging.DEBUG
-  elif args.warnings:
-    log_level = logging.WARNING
-  elif args.errors:
-    log_level = logging.ERROR
-  elif args.quiet:
-    log_level = logging.FATAL
-  if log_level is not None:
-    for inst in get_loggers():
-      inst.setLevel(log_level)
-
-  # Apply one-off logger configuration
-  if args.level:
-    for level_pair in args.level:
-      logger_name, level_code = level_pair.rsplit(":", 1)
-      if level_code not in LEVEL_CODES:
-        ap.error(f"invalid level {level_code}; choices are {LEVEL_CODES}")
-      utility.loghelper.apply_level(logger_name, level_code)
+  configure_logging(ap, args)
 
   # Determine where Noita is installed
   steam_appid = args.steam_appid
@@ -339,7 +366,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
       ap.error("Failed to get requested save directory")
     save_dirs = [save_main]
 
-  # Primary behavior follows
+  # Primary behaviors follow
 
   if args.list_saves:
     for save_dir in save_dirs:
@@ -369,16 +396,10 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
             show_kills=args.show_kills)
 
   if args.show_world:
-    for save_dir in save_dirs:
-      wfile = noitalib.world.get_world_file(save_dir)
-      if os.path.exists(wfile):
-        wstate = noitalib.world.WorldState(wfile)
-        print_world(save_dir, wstate, langmap)
+    _main_show_world(save_dirs, langmap)
 
   if args.show_player:
-    for save_dir in save_dirs:
-      # TODO
-      pass
+    _main_show_player(save_dirs, langmap)
 
 if __name__ == "__main__":
   main()

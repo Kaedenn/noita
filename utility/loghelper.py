@@ -9,8 +9,10 @@ with import order.
 """
 
 import logging
-from . import tracelog
+import os
+import sys
 
+from . import tracelog
 tracelog.hotpatch(logging)
 
 LEVEL_CODES = {
@@ -56,13 +58,21 @@ def apply_level(logger_name, level_code):
     logger = logging.getLogger(logger_name)
   logger.setLevel(level)
 
+BASE_FACTORY = logging.getLogRecordFactory()
+def _create_log_record(*args, **kwargs):
+  "Custom LogRecord factory"
+  record = BASE_FACTORY(*args, **kwargs)
+  if record.name == "__main__":
+    record.name = record.module
+  return record
+
 def _register_logger(name, delay_inst, logger_inst):
   "Register (or re-register) a delay logger"
   _LOGGERS[name] = {"wrapper": delay_inst, "logger": logger_inst}
 
 class DelayLogger:
   "Simple logger wrapper that constructs the logger only when needed"
-  def __init__(self, name):
+  def __init__(self, name, ):
     "See help(type(self)) for signature"
     _register_logger(name, self, None)
     self._name = name
@@ -74,5 +84,12 @@ class DelayLogger:
       self._logger = logging.getLogger(self._name)
       _register_logger(self._name, self, self._logger)
     return getattr(self._logger, attr)
+
+def _init():
+  "Initialize the module for import"
+  logging.setLogRecordFactory(_create_log_record)
+
+if __name__ != "__main__": # module init code
+  _init()
 
 # vim: set ts=2 sts=2 sw=2:

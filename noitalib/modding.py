@@ -8,10 +8,11 @@ import glob
 import os
 
 import steam.paths
+import utility.loghelper
 
 from . import xmltools
 from . import constants
-from .logger import logger
+logger = utility.loghelper.DelayLogger(__name__)
 
 def mod_get_id(mod_path):
   "Get the mod's ID (usually its name, lowercase)"
@@ -75,7 +76,7 @@ def save_get_mods(save_path):
       **kwargs):
     "Simple function to extract specific attributes from everything else"
     return {
-      "enabled": True if enabled == "1" else False,
+      "enabled": enabled == "1",
       "name": name,
       "settings_fold_open": settings_fold_open,
       "workshop_item_id": workshop_item_id,

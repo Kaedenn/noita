@@ -6,9 +6,10 @@ Functions for deciphering the world_state.xml file
 
 import os
 
+import utility.loghelper
 from . import xmltools
 from .xmltools import parse_entries_node, parse_strings_node
-from .logger import logger
+logger = utility.loghelper.DelayLogger(__name__)
 
 # TODO: i18n support
 

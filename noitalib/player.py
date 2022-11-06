@@ -7,8 +7,9 @@ Functions for deciphering the player.xml file
 import datetime
 import os
 
+import utility.loghelper
 from . import xmltools
-from .logger import logger
+logger = utility.loghelper.DelayLogger(__name__)
 
 class Player:
   "The Noita"
@@ -95,9 +96,13 @@ def get_player_file(save_path):
   "Return the path to the player file"
   return os.path.join(save_path, "player.xml")
 
+def has_player_file(save_path):
+  "True if the save contains a player file"
+  return os.path.isfile(get_player_file(save_path))
+
 def parse_player(player_path):
   "Parse the player.xml file"
   logger.trace("Parsing player file %r", player_path)
-  root = xmltools.parse_xml(player_path, get_root=True)
+  return xmltools.parse_xml(player_path, get_root=True)
 
 # vim: set ts=2 sts=2 sw=2:

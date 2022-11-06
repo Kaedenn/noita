@@ -13,8 +13,8 @@ However, world constants are centered at zero:
   >0      east parallel worlds
 """
 
-import enum
-from .logger import logger
+import utility.loghelper
+logger = utility.loghelper.DelayLogger(__name__)
 
 ORB_MAX = 128
 WORLD_MAIN = "main"
@@ -32,7 +32,6 @@ def orb_extract(orb_id):
       world_number = (world_index + 1)/2
     else:
       world_number = -world_index/2
-  logger.debug("%d -> orb %d world %d windex %d", orb_id, orb_number, world_number, world_index)
   return orb_number, world_number
 
 def get_orb(orb_id):
@@ -92,13 +91,14 @@ class Orb:
     "Create a string representing this orb"
     place = langmap(self.place)
     if self.world != WORLD_MAIN:
-      wprefix = "$biome_west" if self.world == WORLD_WEST else "$biome_east"
+      wprefix = "$biome_" + self.world
       if self.woffset != 1:
         wprefix += f" x{self.woffset}"
       place = langmap(wprefix, place)
-      return f"Orb #{self.num} [{self.orbid}] from {place}"
+      return f"Orb {self.orbid} from {place}"
     spell = langmap(self.spell)
-    return f"Orb #{self.num} {spell} from {place}"
+    desc = f"{spell} from {place}".lstrip()
+    return f"Orb {self.num} {desc}"
 
   def __repr__(self):
     "repr(self)"
@@ -113,14 +113,14 @@ BASE_ORBS = {
   5: Orb(5, "$action_bomb_holy", "$biome_wandcave"),
   6: Orb(6, "$action_spiral_shot", "$biome_rainforest_dark"),
   7: Orb(7, "$action_cloud_thunder", "Bridge Chasm"),
-  8: Orb(8, "$action_fireworks", "$biome_boss_victoryroom (Hell)"),
+  8: Orb(8, "$action_firework", "$biome_boss_victoryroom (Hell)"),
   9: Orb(9, "$action_exploding_deer", "$biome_winter_caves"),
   10: Orb(10, "$action_material_cement", "$biome_wizardcave"),
   11: Orb(11, "", "Great Treasure Chest")
 }
 
 ORBS = {}
-def _init():
+def _init(): # TODO: FIXME: Verify the following logic
   "Initialize the ORBS global"
   for oid, orb in BASE_ORBS.items():
     if oid != ORB_11:

@@ -6,7 +6,8 @@ Common XML-related functions to support Noita
 
 import lxml.etree as et
 
-from .logger import logger
+import utility.loghelper
+logger = utility.loghelper.DelayLogger(__name__)
 
 def parse_xml(file_path, get_root=True):
   "Helper function to read an XML file"

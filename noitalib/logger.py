@@ -6,6 +6,10 @@ The logger instance
 
 import utility.loghelper
 
-logger = utility.loghelper.DelayLogger("noita")
+def create(name):
+  "Create a new delayed logger"
+  return utility.loghelper.DelayLogger(name)
+
+logger = create("noita")
 
 # vim: set ts=2 sts=2 sw=2:

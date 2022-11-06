@@ -7,9 +7,10 @@ Functions for determining filesystem paths
 import os
 
 import steam.paths
+import utility.loghelper
 
 from .constants import NOITA_APPID, NOITA_APPDIR
-from .logger import logger
+logger = utility.loghelper.DelayLogger(__name__)
 
 def get_save_path(steam_path, appid=NOITA_APPID):
   "Get the path to the Noita save directories"
