@@ -1,0 +1,1 @@
+# Noita Inquiry Tool
