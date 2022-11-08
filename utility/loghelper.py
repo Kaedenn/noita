@@ -51,9 +51,16 @@ def apply_level(logger_name, level_code):
     raise ValueError(f"Invalid level code {level_code!r}")
   level = LEVEL_CODES[level_code]
   if logger_name == "__root__":
-    logger = logging.getLogger()
-  elif logger_name == "__name__" or logger_name == "__main__":
-    logger = logging.getLogger("__main__")
+    logger = logging.root
+  elif logger_name in ("__name__", "__main__"):
+    logger_name = "__main__"
+    logger = logging.getLogger(logger_name)
+  elif logger_name in _LOGGERS:
+    if _LOGGERS[logger_name]["logger"] is not None:
+      logger = _LOGGERS[logger_name]["logger"]
+    else:
+      logger = logging.getLogger(logger_name)
+      _LOGGERS[logger_name]["wrapper"].apply(logger)
   else:
     logger = logging.getLogger(logger_name)
   logger.setLevel(level)
@@ -72,11 +79,31 @@ def _register_logger(name, delay_inst, logger_inst):
 
 class DelayLogger:
   "Simple logger wrapper that constructs the logger only when needed"
-  def __init__(self, name, ):
+  def __init__(self, name):
     "See help(type(self)) for signature"
     _register_logger(name, self, None)
     self._name = name
     self._logger = None
+
+  @property
+  def name(self):
+    "Get self._name"
+    return self._name
+
+  @property
+  def initialized(self):
+    "True if self._logger is not None, False otherwise"
+    return self._logger is not None
+
+  def unwrap(self):
+    "Get the wrapped logger, or None if it doesn't exist"
+    return self._logger
+
+  def apply(self, logger, reregister=True):
+    "Use the given logger"
+    self._logger = logger
+    if reregister:
+      _register_logger(self._name, self, self._logger)
 
   def __getattr__(self, attr):
     "Construct the logger when needed"

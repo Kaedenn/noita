@@ -202,11 +202,19 @@ class LanguageMap:
       matstr += f" (as {matid})"
     return matstr
 
+  def is_material(self, matid):
+    "True if the matid is a real material"
+    return "mat_" + matid in self._tokens
+
   def perk(self, perkid, count=1):
     "Get the localized name of a perk"
     perkstr = self.localize("$perk_" + perkid)
     if count > 0:
       perkstr += f" x{count}"
     return perkstr
+
+  def is_perk(self, perkid):
+    "True if the perkid is a real perk"
+    return "perk_" + perkid in self._tokens
 
 # vim: set ts=2 sts=2 sw=2:

@@ -7,6 +7,9 @@ This script aims to distill information about your Noita installation
 and your sessions played.
 """
 
+# FIXME:
+# noitalib.world says I have Pyramid orb when I have platform orb
+
 import argparse
 import datetime
 import glob
@@ -28,25 +31,37 @@ logging.basicConfig(
     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Permitted values for --dump-i18n
+LM_DUMP_BRIEF = "brief"
+LM_DUMP_VALUE = "value"
+LM_DUMP_VALUES = "values"
+LM_DUMP_FULL = "full"
+LM_DUMP = (LM_DUMP_BRIEF, LM_DUMP_VALUE, LM_DUMP_VALUES, LM_DUMP_FULL)
+
 UNSET = "" # Used to differentiate "unset" and "set but with no value"
+
+def localize_material(material, langmap, with_orig=False):
+  "Localize a material"
+  if not langmap.is_material(material):
+    # failed to localize
+    return material
+  mat_str = langmap.material(material)
+  if not with_orig or mat_str == material:
+    return mat_str.title()
+  return "{} ({})".format(mat_str.title(), material)
 
 def get_saves(saves_path, for_save=None):
   """
   Get a specific save directory if for_save is not None, or a list of
   all save directories otherwise
   """
+  for_saves = [for_save] if for_save is not None else None
+  save_dirs = noitalib.paths.get_save_paths(saves_path, for_saves)
   if for_save is not None:
-    save_dir = os.path.join(saves_path, for_save)
-    if os.path.isdir(save_dir):
-      return save_dir
-    logger.error("No such save %r in %s", for_save, saves_path)
-    return None
-
-  save_dirs = []
-  for save_dir in os.listdir(saves_path):
-    if len(save_dir) == len("save00"):
-      if save_dir[:4] == "save" and save_dir[5:].isdigit():
-        save_dirs.append(os.path.join(saves_path, save_dir))
+    if not save_dirs:
+      logger.error("No such save %r in %s", for_save, saves_path)
+      return None
+    return save_dirs[0]
   save_dirs.sort(key=os.path.basename)
   return save_dirs
 
@@ -108,19 +123,22 @@ def dump_language_map(langmap, mode, lang_override):
   "Dump the language map"
   if mode is None:
     if lang_override is None:
-      mode = "brief"
+      mode = LM_DUMP_BRIEF
     else:
-      mode = "value"
+      mode = LM_DUMP_VALUE
+  elif mode not in LM_DUMP:
+    logger.error("Invalid langmap dump mode %r", mode)
+    logger.info("Choices are: %s", LM_DUMP)
   for token in sorted(langmap):
-    if mode == "brief":
+    if mode == LM_DUMP_BRIEF:
       print(token)
-    elif mode == "value":
+    elif mode == LM_DUMP_VALUE:
       value = langmap.get(token, language=lang_override)
       print(f"{token} {value!r}")
-    elif mode == "values":
+    elif mode == LM_DUMP_VALUES:
       values = langmap.get_token(token).translations
       print(f"{token} {values!r}")
-    elif mode == "full":
+    elif mode == LM_DUMP_FULL:
       ttoken = langmap.get_token(token)
       values = ttoken.translations
       notes = ttoken.notes
@@ -146,12 +164,14 @@ def world_get_orbs(save_dir, wstate, langmap):
 def print_world(save_dir, wstate, langmap):
   "Print a WorldState"
   save_name = os.path.basename(save_dir)
-  print(f"{save_name} - {len(wstate.orbs())} orbs")
+  num_orbs = Pl(len(wstate.orbs()), "orb")
+  print(f"{save_name} - {num_orbs}")
 
   orb_info = world_get_orbs(save_dir, wstate, langmap)
   orbs_have = orb_info["orbs_have"]
   orbs_need = orb_info["orbs_need"]
   orb_map = orb_info["orb_map"]
+  logger.debug("orbs_have = %r", orbs_have)
   for orb_id, orb in sorted(orbs_have.items()):
     label = orb.localize(langmap)
     print(f"\tCollected orb {orb_id}: {label}")
@@ -164,8 +184,8 @@ def print_world(save_dir, wstate, langmap):
   shifts = list(wstate.shifts())
   print(f"Fungal shifts: {len(shifts)}")
   for mat1, mat2 in shifts:
-    mat1str = langmap.material(mat1)
-    mat2str = langmap.material(mat2)
+    mat1str = localize_material(mat1, langmap)
+    mat2str = localize_material(mat2, langmap)
     print(f"\t{mat1str} to {mat2str}")
 
   logger.debug("Lua global variables:")
@@ -207,10 +227,25 @@ def configure_logging(ap, args):
   # Apply one-off logger configuration
   if args.level:
     for level_pair in args.level:
-      logger_name, level_code = level_pair.rsplit(":", 1)
+      try:
+        logger_name, level_code = level_pair.rsplit(":", 1)
+      except ValueError:
+        ap.error(f"invalid level pair {level_pair}; must be <name>:<level>")
       if level_code not in LEVEL_CODES:
         ap.error(f"invalid level {level_code}; choices are {LEVEL_CODES}")
       utility.loghelper.apply_level(logger_name, level_code)
+
+  if args.list_loggers:
+    for inst in get_loggers():
+      wrapper = None
+      if isinstance(inst, utility.loghelper.DelayLogger):
+        if inst.initialized:
+          print("{}: delay; initialized".format(inst.name))
+        else:
+          print("{}: delay; not initialized".format(inst.name))
+      else:
+        level = logging.getLevelName(inst.getEffectiveLevel())
+        print("{}: core logger: {}".format(inst.name, level))
 
 def _main_show_world(save_dirs, langmap):
   "Print information about the world"
@@ -220,8 +255,8 @@ def _main_show_world(save_dirs, langmap):
       wstate = noitalib.world.WorldState(wfile)
       print_world(save_dir, wstate, langmap)
 
-def _main_show_player(save_dirs, langmap):
-  "Print information about the player"
+def _main_show_players(save_dirs, langmap): # TODO: configure output
+  "Print information about the player(s)"
   players = {}
   for save_dir in save_dirs:
     save_name = os.path.basename(save_dir)
@@ -231,6 +266,57 @@ def _main_show_player(save_dirs, langmap):
       players[save_name] = player
       logger.debug("In %s: %r", save_dir, player)
   logger.debug("Found %s", Pl(len(players), "player file"))
+  for save, player in players.items():
+    _main_show_player(save, player, langmap)
+
+def _main_show_player(save, player, langmap): # TODO: configure output
+  "Print information about a single player"
+  labels = []
+  labels.append("HP: {}/{}".format(player.health, player.max_health))
+  print("{}: {}".format(save, "; ".join(labels)))
+  # Display blood attributes
+  blood = localize_material(player.blood_material, langmap)
+  blood_spray = localize_material(player.blood_spray_material, langmap)
+  print("\tPlayer bleeds {} (sprays {})".format(blood, blood_spray))
+  # Display absolute damage from damaging materials
+  print("Material damage values:")
+  for mat, amt in player.material_damages.items():
+    mat_str = localize_material(mat, langmap)
+    print("\tDamage from {}: {}".format(mat_str, amt))
+  # Display damage multipliers
+  print("Damage type multipliers:")
+  for kind, amt in player.damage_multipliers.items():
+    print("\tDamage mult from {}: {}".format(kind, amt))
+  # Display status effects
+  print("Ingested materials:")
+  for mat_kind, mat_count in player.ingestions().items():
+    mat_str = localize_material(mat_kind, langmap)
+    print("\tIngested {} of {}".format(mat_count, mat_str))
+  print("Status effects:")
+  for status, values in player.status_effects().items():
+    if status != "air":
+      label = status
+      val_str = " ".join("{}={}".format(key, val) for key, val in values)
+      if langmap.is_material(status):
+        label = "from eating " + localize_material(status, langmap)
+      print("\tEffect {}: {}".format(label, val_str))
+  for wand in player.wands: # TODO
+    pass
+  print("Inventory:")
+  for item in player.items: # TODO
+    iname = langmap(item[1]) + " (" + item[1] + ")"
+    idesc = item[2]
+    if idesc.startswith("$"):
+      idesc = langmap(idesc) + " (" + idesc + ")"
+    iinfo = item[3] if len(item) > 3 else {}
+    labels = []
+    if iinfo:
+      labels.append(repr(iinfo))
+    label = " ".join(labels)
+    print("\t{} {!r} {}".format(iname, idesc, label).rstrip())
+    # TODO: format potion/sack contents
+  for spell in player.spells: # TODO
+    pass
 
 def main():
   "Entry point"
@@ -266,16 +352,16 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
   ag = ap.add_argument_group("save selection")
   ag.add_argument("-S", "--save",
       help="limit output to a specific save directory")
-  ag = ap.add_argument_group("output behavior")
   ag.add_argument("--list-saves", action="store_true",
       help="display available save directories")
+  ag = ap.add_argument_group("modding")
   ag.add_argument("--list-mods", action="store_true",
       help="list both workshop and native mods")
-  ag.add_argument("-L", "--list-sessions", action="store_true",
-      help="display the sessions that have been played")
-  ag = ap.add_argument_group("session selection and configuration")
+  ag = ap.add_argument_group("sessions")
   ag.add_argument("-s", "--session", metavar="TERM",
       help="display session(s) matching the given term (see below)")
+  ag.add_argument("-L", "--list-sessions", action="store_true",
+      help="display the sessions that have been played")
   ag.add_argument("--show-stats", action="store_true",
       help="include session stats")
   ag.add_argument("--show-items", action="store_true",
@@ -284,14 +370,13 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
       help="include session biomes visited")
   ag.add_argument("--show-kills", action="store_true",
       help="include session kills")
-  ag = ap.add_argument_group("game data")
+  ag = ap.add_argument_group("current game information")
   ag.add_argument("-W", "--show-world", action="store_true",
       help="display information about the game world itself")
   ag.add_argument("-P", "--show-player", action="store_true",
       help="display information about the player")
   ag = ap.add_argument_group("internationalization")
-  ag.add_argument("--dump-i18n", nargs="?", default=UNSET,
-      choices=("brief", "value", "values", "full"),
+  ag.add_argument("--dump-i18n", nargs="?", default=UNSET, choices=LM_DUMP,
       help="output the i18n mapping")
   ag.add_argument("--language", metavar="CODE", help="language code override")
   ag.add_argument("--localize", metavar="STR", action="append",
@@ -299,6 +384,8 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
   ag.add_argument("--no-i18n", action="store_true",
       help="disable internationalization support")
   ag = ap.add_argument_group("diagnostics")
+  ag.add_argument("--list-loggers", action="store_true",
+      help="list all of the known loggers (for debugging)")
   ag.add_argument("--level", metavar="LOGGER:LEVEL", action="append",
       help="configure the named logger with the given level code (see below)")
   mg = ag.add_mutually_exclusive_group()
@@ -337,7 +424,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
   logger.debug("Noita is installed at %s", game_path)
 
   # Determine where Notia stores save data
-  save_root = noitalib.paths.get_save_path(steam_path, appid)
+  save_root = noitalib.paths.get_saves_path(steam_path, appid)
   if not os.path.isdir(save_root):
     ap.error(f"Failed to locate Noita saves; {save_root} not a directory")
   logger.debug("Noita saves to %s", save_root)
@@ -399,7 +486,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
     _main_show_world(save_dirs, langmap)
 
   if args.show_player:
-    _main_show_player(save_dirs, langmap)
+    _main_show_players(save_dirs, langmap)
 
 if __name__ == "__main__":
   main()
