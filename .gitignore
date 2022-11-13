@@ -1,6 +1,6 @@
 # Scratch space
 ref/
-mods/
+mods/*/
 
 # Protected files
 .envrc
