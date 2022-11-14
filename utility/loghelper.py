@@ -9,8 +9,6 @@ with import order.
 """
 
 import logging
-import os
-import sys
 
 from . import tracelog
 tracelog.hotpatch(logging)
