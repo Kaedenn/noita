@@ -2,7 +2,7 @@
 
 # Copy mods from this directory to the Noita directory
 
-source mod_copy_util.sh
+source "$(dirname "$0")/mod_copy_util.sh"
 
 print_help() {
   cat <<EOF >&2
