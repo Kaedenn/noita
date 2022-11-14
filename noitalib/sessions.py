@@ -15,6 +15,10 @@ import utility.loghelper
 from . import xmltools
 logger = utility.loghelper.DelayLogger(__name__)
 
+def get_kills_file(stats_file):
+  "Get a kills.xml file from a given stats.xml file"
+  return stats_file.replace("stats.xml", "kills.xml")
+
 def session_get_time(stats_file):
   "Get the date and time the given session was played"
   # 20221013-203926_stats.xml
@@ -54,8 +58,10 @@ def parse_kills(kills_root):
     "deaths": xmltools.parse_entries_node(deaths_node, as_int=True)
   }
 
-def parse_session(stats_file, kills_file):
+def parse_session(stats_file, kills_file=None):
   "Extract information from a given play session"
+  if kills_file is None:
+    kills_file = get_kills_file(stats_file)
   date_played = session_get_time(stats_file)
   stats_root = xmltools.parse_xml(stats_file, get_root=True)
 
