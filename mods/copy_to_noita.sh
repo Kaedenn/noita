@@ -6,7 +6,7 @@ source "$(dirname "$0")/mod_copy_util.sh"
 
 print_help() {
   cat <<EOF >&2
-usage: $0 [-n] [-o DIR] [-v] [-h] [MOD...]
+usage: $0 [-n] [-i DIR] [-v] [-h] [MOD...]
 
 options:
   -n      dry run; do not actually copy anything
