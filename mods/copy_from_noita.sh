@@ -6,11 +6,12 @@ source "$(dirname "$0")/mod_copy_util.sh"
 
 print_help() {
   cat <<EOF >&2
-usage: $0 [-n] [-o DIR] [-v] [-h] [MOD...]
+usage: $0 [-n] [-o DIR] [-D] [-v] [-h] [MOD...]
 
 options:
   -n      dry run; do not actually copy anything
   -o DIR  copy mods to DIR instead of to CWD
+  -D      delete destination mod directory before copying
   -v      enable verbose diagnostics
   -h      this message
 
@@ -20,12 +21,14 @@ EOF
 }
 
 export LOCAL_DIR="$(dirname "$0")"
-while getopts "nvo:h" arg; do
+while getopts "no:Dvh" arg; do
   case "$arg" in
     h) print_help; exit 0;;
     v) export NOITA_DEBUG=1;;
-    n) export DRY_RUN=1;;
+    D) export DELETE_BEFORE=1;;
     o) export LOCAL_DIR="$OPTARG";;
+    n) export DRY_RUN=1;;
+    *) error "execute $0 -h for usage"; exit 1;;
   esac
 done
 shift $((OPTIND - 1))
@@ -57,8 +60,8 @@ _main() {
     local modname="$(basename "$modpath")"
     local moddest="$mod_dest/$modname"
     log "scanning $modname ($modpath)"
-    if should_copy "$modname"; then
-      log "may need to replicate $modname to $moddest"
+    if check_should_compare "$modpath" "$mod_dest"; then
+      log "adding $modname to the mods to compare"
       to_compare+=(["$modpath"]="$moddest")
     fi
   done
@@ -75,13 +78,9 @@ _main() {
     local modroot="$(dirname "$moddest")"
     local modname="$(basename "$modpath")"
     log "checking $modpath against $moddest..."
-    if should_replicate "$modpath" "$moddest"; then
+    if compare_paths "$modpath" "$moddest"; then
       info "Copying $modname from $modpath"
-      if [[ -z "${DRY_RUN:-}" ]]; then
-        checked copy_tree "$modpath" "$modroot"
-      else
-        info "DRY: not replicating '$modpath' to '$modroot'"
-      fi
+      copy_mod "$modpath" "$modroot"
     else
       log "$modname $moddest is up-to-date with $modpath"
     fi
