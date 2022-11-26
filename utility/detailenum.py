@@ -10,8 +10,6 @@ except ImportError: # allow execution as a script
   import collectionfuncs as _cfuncs
 import enum
 
-# pylint: disable=comparison-with-callable
-
 # Mapping of <enum-name>: <enum-obj> for all Detail enumerations
 DETAIL = {}
 
@@ -26,6 +24,7 @@ class Detail(enum.Enum):
   FULL = enum.auto()
   def __lt__(self, other):
     "self < other"
+    # pylint: disable=comparison-with-callable
     if isinstance(other, Detail):
       return self.value < other.value
     if isinstance(other, str):
@@ -61,7 +60,7 @@ def detail_help(level_name_or_enum):
 
 def _main():
   "Test suites"
-  # pylint: disable=unneded-not
+  # pylint: disable=unneeded-not
   assert Detail.BRIEF < Detail.BASIC
   assert Detail.BRIEF <= Detail.BRIEF
   assert Detail.BASIC < Detail.LESS
