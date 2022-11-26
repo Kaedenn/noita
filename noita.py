@@ -222,8 +222,13 @@ def print_world(save_dir, wstate, langmap, detail=Detail.BASIC):
   "Print a WorldState"
   save_name = os.path.basename(save_dir)
   num_orbs = Pl(len(wstate.orbs()), "orb")
-  session = wstate.get_session_stats(save_dir)
-  print(f"{save_name} - {num_orbs} - Seed {session['seed']}")
+  try:
+    session = wstate.get_session_stats(save_dir)
+    seed = session["seed"]
+  except FileNotFoundError:
+    logger.warning("World %s session file not found")
+    seed = "<unknown>"
+  print(f"{save_name} - {num_orbs} - Seed {seed}")
 
   if detail >= Detail.BASIC:
     orb_info = world_get_orbs(save_dir, wstate, langmap)
