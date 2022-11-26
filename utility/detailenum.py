@@ -17,7 +17,6 @@ def _dec_other_cmp(func):
     "Wrapper function"
     if isinstance(other, int):
       return func(self, Detail(other))
-      rhs = Detail(other)
     if isinstance(other, str):
       if other in DETAIL:
         return func(self, DETAIL[other])
@@ -28,6 +27,7 @@ def _dec_other_cmp(func):
 
 class Detail(enum.Enum):
   "'Amount of detail' enumeration constants"
+  # pylint: disable=comparison-with-callable
   BRIEF = enum.auto()
   BASIC = enum.auto()
   LESS = enum.auto()
