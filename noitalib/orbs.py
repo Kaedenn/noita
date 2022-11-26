@@ -105,8 +105,8 @@ class Orb:
     return f"Orb({self.orbid}, {self.spell!r}, {self.place!r})"
 
 BASE_ORBS = {
-  0: Orb(0, "$action_crumbling_earth", "$biome_pyramid"),
-  1: Orb(1, "$action_sea_lava", "Floating Island"),
+  0: Orb(0, "$action_sea_lava", "Floating Island"),
+  1: Orb(1, "$action_crumbling_earth", "$biome_pyramid"),
   2: Orb(2, "$action_tentacle", "$biome_vault_frozen"),
   3: Orb(3, "$action_nuke", "$biome_lavacave"), # TODO: verify
   4: Orb(4, "$action_necromancy", "$biome_sandcave"),

@@ -7,9 +7,6 @@ This script aims to distill information about your Noita installation
 and your sessions played.
 """
 
-# FIXME:
-# noitalib.world may say I have Pyramid orb when I have platform orb
-
 import argparse
 import datetime
 import glob
