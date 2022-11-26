@@ -453,7 +453,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
       print(f"\t{dnames_str} = {dvalue}: {dhelp}")
     ap.exit()
 
-  detail = Detail[args.detail]
+  detail = DETAIL[args.detail]
 
   # Check some more-complex mutually-exclusive rules
   if args.no_i18n:

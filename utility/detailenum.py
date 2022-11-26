@@ -24,12 +24,11 @@ class Detail(enum.Enum):
   FULL = enum.auto()
   def __lt__(self, other):
     "self < other"
-    # pylint: disable=comparison-with-callable
     if isinstance(other, Detail):
-      return self.value < other.value
+      return self.value() < other.value()
     if isinstance(other, str):
-      return self.value < Detail[other].value
-    return self.value < other
+      return self.value() < Detail[other].value()
+    return self.value() < other
 
 DETAIL.update({_value.name: _value for _value in Detail})
 DETAIL.update({
