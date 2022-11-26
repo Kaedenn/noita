@@ -6,13 +6,14 @@ source "$(dirname "$0")/mod_copy_util.sh"
 
 print_help() {
   cat <<EOF >&2
-usage: $0 [-n] [-o DIR] [-D] [-v] [-h] [MOD...]
+usage: $0 [-n] [-o DIR] [-D] [-v] [-V] [-h] [MOD...]
 
 options:
   -n      dry run; do not actually copy anything
   -o DIR  copy mods to DIR instead of to CWD
   -D      delete destination mod directory before copying
   -v      enable verbose diagnostics
+  -V      enable very verbose diagnostics: show diffs
   -h      this message
 
 Any mods specified on the command-line will automatically be considered
@@ -21,9 +22,10 @@ EOF
 }
 
 export LOCAL_DIR="$(dirname "$0")"
-while getopts "no:Dvh" arg; do
+while getopts "no:DvVh" arg; do
   case "$arg" in
     h) print_help; exit 0;;
+    V) export NOITA_TRACE=1;;
     v) export NOITA_DEBUG=1;;
     D) export DELETE_BEFORE=1;;
     o) export LOCAL_DIR="$OPTARG";;
@@ -35,6 +37,7 @@ shift $((OPTIND - 1))
 
 declare -a NAMED_MODS=("$@")
 
+log "NOITA_TRACE=${NOITA_TRACE:-}"
 log "NOITA_DEBUG=${NOITA_DEBUG:-}"
 log "DRY_RUN=${DRY_RUN:-\033[3munset\033[0m}"
 log "LOCAL_DIR=${LOCAL_DIR:-\033[3munset\033[0m}"

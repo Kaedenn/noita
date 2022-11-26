@@ -3,10 +3,17 @@
 # Functions used by both of the mod copy scripts
 
 # Environment variables:
+#   NOITA_TRACE     set to a non-empty value to print diffs
 #   NOITA_DEBUG     set to a non-empty value to enable debugging
 #   DRY_RUN         set to a non-empty value to enter "dry run mode"
-#   INCLUDE_NOTDIR  for check_should_compare; always include mods that
+#   INC_NODEST      for check_should_compare; always include mods that
 #                   exist in the source but not the destination
+#   DELETE_BEFORE   set to a non-empty value to rm -r the desination
+#                   prior to copying
+#   STEAM           alternate path to the Steam root directory
+
+# Note on diffs: files and directories starting with a period are
+# skipped on compare. This behavior cannot be altered.
 
 # TODO:
 # When copying mods, always remove files and directories that exist on
@@ -67,22 +74,23 @@ checked() { # <command...>
   return $status
 }
 
-# Echo the path to the Steam base directory, or exit on error
+# Locate the Steam base directory or exit with an error if not found
 find_steam() { # no args
-  local steam_root="$HOME/.steam"
-  if [[ -d "$steam_root" ]]; then
-    if [[ -h "$steam_root/steam" ]]; then
-      echo "$(readlink -f "$steam_root/steam")"
-    elif [[ -h "~/.steam/root" ]]; then
-      echo "$(readlink -f "$steam_root/root")"
-    else
-      echo "error: failed to locate Steam" >&2
-      exit 1
-    fi
-  else
-    echo "error: failed to locate Steam: ~/.steam missing" >&2
-    exit 1
+  local -a steam_paths=("$HOME/steam")
+  local -a steam_links=("steam" "root")
+  if [[ -n "${STEAM:-}" ]]; then
+    steam_paths+=("$STEAM")
   fi
+  for sroot in "${steam_paths[@]}"; do
+    for slink in "${steam_links[@]}"; do
+      if [[ -h "$sroot/$slink" ]] && [[ -d "$sroot/$slink" ]]; then
+        echo "$(readlink -f "$sroot/$slink")"
+        return $T
+      fi
+    done
+  done
+  error "failed to locate Steam; please set STEAM=<steam-root>"
+  exit 1
 }
 
 # True if a path is indeed a mod by looking for mod.xml and init.lua
@@ -116,7 +124,7 @@ check_mod_name() {
 }
 
 # Evaluates to true if we should copy the mod to the given directory
-# Set INCLUDE_NOTDIR to a non-empty value to force including mods
+# Set INC_NODEST to a non-empty value to force including mods
 # where the destination does not exist (or is not a directory),
 # regardless of the mod's actual name.
 check_should_compare() { # <src-path> <dest-root>
@@ -125,7 +133,7 @@ check_should_compare() { # <src-path> <dest-root>
   if check_mod_name "$modname"; then
     return $T
   elif [[ ! -d "$destpath" ]]; then
-    if [[ -n "${INCLUDE_NOTDIR:-}" ]]; then
+    if [[ -n "${INC_NODEST:-}" ]]; then
       return $T
     fi
   fi
@@ -134,8 +142,12 @@ check_should_compare() { # <src-path> <dest-root>
 
 # Compare two directories to determine if replication should occur
 compare_paths() { # <remote-dir> <local-dir>
+  local -a diff_args=()
+  if [[ -z "${NOITA_TRACE:-}" ]]; then
+    diff_args+=(-q)
+  fi
   if [[ -d "$2" ]]; then
-    if diff -q -r -x '.*' "$1" "$2"; then
+    if diff ${diff_args[@]} -r -x '.*' "$1" "$2"; then
       return $F
     fi
     return $T
