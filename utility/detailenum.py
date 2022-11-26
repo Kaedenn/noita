@@ -58,6 +58,9 @@ class Detail(enum.Enum):
   def __ge__(self, other):
     "self >= other"
     return self.value >= other.value
+  def __hash__(self):
+    "hash(self)"
+    return self.value
 
 DETAIL.update({_value.name: _value for _value in Detail})
 DETAIL.update({
