@@ -76,7 +76,7 @@ checked() { # <command...>
 
 # Locate the Steam base directory or exit with an error if not found
 find_steam() { # no args
-  local -a steam_paths=("$HOME/steam")
+  local -a steam_paths=("$HOME/.steam")
   local -a steam_links=("steam" "root")
   if [[ -n "${STEAM:-}" ]]; then
     steam_paths+=("$STEAM")
