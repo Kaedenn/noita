@@ -222,7 +222,7 @@ class Player:
         elif "item_pickup" in tags and "item_physics" in tags:
           kind = "pickup"
         else:
-          logger.warning("Unknown item from tags %s", tags)
+          logger.debug("Unknown item from tags %s", tags)
       else:
         kind = "spell"
       entries.append((kind, celem))

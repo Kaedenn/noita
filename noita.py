@@ -23,8 +23,8 @@ utility.loghelper.tracelog.hotpatch(logging)
 
 # pylint: disable=wrong-import-position
 import noitalib
-import steam.paths
 from noitalib.translations import plural as Pl
+import steam.paths
 
 logging.basicConfig(
     format="%(name)s:%(lineno)s: %(levelname)s: %(message)s",

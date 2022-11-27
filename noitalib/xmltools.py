@@ -43,4 +43,11 @@ def parse_strings_node(node):
     entries.append(elem.text.strip())
   return entries
 
+def remove_space_tails(node, replace_with=""):
+  "Remove all node tails that consist of only whitespace"
+  for cnode in node.getchildren():
+    if cnode.tail and cnode.tail.isspace():
+      cnode.tail = replace_with
+    remove_space_tails(cnode, replace_with)
+
 # vim: set ts=2 sts=2 sw=2:
