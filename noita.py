@@ -171,24 +171,20 @@ def print_player(save, player, langmap, detail): # TODO: detail levels
   labels = []
   labels.append("HP: {}/{}".format(player.health, player.max_health))
   print("{}: {}".format(save, "; ".join(labels)))
-  # Display blood attributes
   blood = localize_material(player.blood_material, langmap)
   blood_spray = localize_material(player.blood_spray_material, langmap)
   print("\tPlayer bleeds {} (sprays {})".format(blood, blood_spray))
-  # Display absolute damage from damaging materials
   print("Material damage values:")
   for mat, amt in player.material_damages.items():
     mat_str = localize_material(mat, langmap)
     print("\tDamage from {}: {}".format(mat_str, amt))
-  # Display damage multipliers
   print("Damage type multipliers:")
   for kind, amt in player.damage_multipliers.items():
     print("\tDamage mult from {}: {}".format(kind, amt))
-  # Display status effects
   print("Ingested materials:")
   for mat_kind, mat_count in player.ingestions().items():
     mat_str = localize_material(mat_kind, langmap)
-    print("\tIngested {} of {}".format(mat_count, mat_str))
+    print("\tIngested {} {}".format(mat_count, mat_str))
   print("Status effects:")
   for status, values in player.status_effects().items():
     if status != "air":
@@ -197,14 +193,21 @@ def print_player(save, player, langmap, detail): # TODO: detail levels
       if langmap.is_material(status):
         label = "from eating " + localize_material(status, langmap)
       print("\tEffect {}: {}".format(label, val_str))
+  print("Wands:")
   for wand in player.wands: # TODO
     pass
   print("Inventory:")
   for item in player.items: # TODO
-    iname = langmap(item[1]) + " (" + item[1] + ")"
+    if item[0] in ("wand", "card"):
+      continue
+    iname = langmap(item[1])
+    if detail >= Detail.MORE:
+      iname += f" ({item[1]})"
     idesc = item[2]
     if idesc.startswith("$"):
-      idesc = langmap(idesc) + " (" + idesc + ")"
+      idesc = langmap(idesc)
+      if detail >= Detail.MORE:
+        idesc += " (" + idesc + ")"
     iinfo = item[3] if len(item) > 3 else {}
     labels = []
     if iinfo:
@@ -212,6 +215,7 @@ def print_player(save, player, langmap, detail): # TODO: detail levels
     label = " ".join(labels)
     print("\t{} {!r} {}".format(iname, idesc, label).rstrip())
     # TODO: format potion/sack contents
+  print("Spells:")
   for spell in player.spells: # TODO
     pass
 
@@ -351,6 +355,26 @@ def _main_show_players(save_dirs, langmap, detail):
   logger.debug("Found %s", Pl(len(players), "player file"))
   for save, player in players.items():
     print_player(save, player, langmap, detail)
+
+def _main_list_mods(steam_path, appid, game_path, detail):
+  "List both Steam and native mods"
+  for mod_def in itertools.chain(
+      noitalib.get_workshop_mods(steam_path, appid),
+      noitalib.get_native_mods(game_path)):
+    mod_id = mod_def["id"]
+    mod_wsid = mod_def["workshop_id"]
+    prefix = []
+    prefix.append(mod_wsid if mod_wsid else "Native")
+    if detail >= Detail.MORE:
+      prefix.append(os.path.dirname(mod_def["path"]))
+    label = " ".join(prefix)
+    pieces = [" ".join(prefix)]
+    if detail >= Detail.NORMAL:
+      pieces.append(repr(mod_id))
+    pieces.append(repr(mod_def["name"]))
+    if detail >= Detail.NORMAL:
+      pieces.append(mod_def["description"])
+    print(" ".join(pieces))
 
 def main():
   "Entry point"
@@ -513,15 +537,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
       print(f"{save_name} {save_dir}")
 
   if args.list_mods:
-    mods = itertools.chain(
-        noitalib.get_workshop_mods(steam_path, appid),
-        noitalib.get_native_mods(game_path))
-    for mod_def in mods:
-      mod_id = mod_def["id"]
-      mod_num = mod_def["workshop_id"]
-      mod_name = mod_def["name"]
-      mod_desc = mod_def["description"]
-      print(f"{mod_num}: {mod_id}: {mod_name} - {mod_desc}")
+    _main_list_mods(steam_path, appid, game_path, args.detail)
 
   if args.list_sessions:
     session_sort_key = lambda sess: sess["date"]

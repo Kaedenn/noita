@@ -32,11 +32,12 @@ def mod_get_compat(mod_path):
     logger.debug("Mod %s lacks compatibility file", mod_path)
     return {}
 
-def get_mod(mod_path):
+def get_mod(mod_path, native=False):
   """
-  Get (mod_id, mod_info, compat_info) from the given mod directory
+  Get information encoding the given mod
 
-  Supports both Steam workshop mods and native Noita mods.
+  Supports both Steam workshop mods and native Noita mods. Set native
+  to False to force the workshop_id to be None.
   """
   mod_num = os.path.dirname(mod_path)
   mod_id = mod_get_id(mod_path)
@@ -44,7 +45,8 @@ def get_mod(mod_path):
   mod_info = xmltools.parse_xml(modfile, get_root=True).attrib
   return {
     "id": mod_id,
-    "workshop_id": os.path.basename(mod_path),
+    "path": modfile,
+    "workshop_id": None if native else os.path.basename(mod_path),
     "name": mod_info["name"],
     "description": mod_info["description"],
     "compat": mod_get_compat(mod_path)
@@ -65,7 +67,7 @@ def get_native_mods(game_path=None):
     _, game_path = steam.paths.get_game("Noita")
   for modfile in glob.glob(os.path.join(game_path, "mods", "*", "mod.xml")):
     logger.trace("Found mod file %s", modfile)
-    yield get_mod(os.path.dirname(modfile))
+    yield get_mod(os.path.dirname(modfile), native=True)
 
 def save_get_mods(save_path):
   "Get the mods available for the given save and their status"
@@ -87,7 +89,7 @@ def save_get_mods(save_path):
   for order, mod_node in enumerate(root.cssselect("Mod")):
     mod = mod_def(**mod_node.attrib)
     mod["order"] = order + 1
-    if not mod["extra"]:
+    if not mod["extra"]: # remove "extra" if empty
       del mod["extra"]
     yield mod
 

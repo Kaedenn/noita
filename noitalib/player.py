@@ -4,12 +4,17 @@
 Functions for deciphering the player.xml file
 """
 
+# TODO: Separate quick inventory and full inventory
+# TODO: Interpret egg contents
+# TODO: Handle powder sacks
+
 import datetime
 import os
 
 import utility.loghelper
 from .xmltools import parse_strings_node as xml_parse_strings
 from . import xmltools
+from . import items
 
 logger = utility.loghelper.DelayLogger(__name__)
 
@@ -212,19 +217,7 @@ class Player:
     "Interpret an inventory node"
     entries = []
     for celem in elem.findall("Entity"):
-      kind = "other"
-      tags = celem.attrib["tags"].split(",")
-      if quick:
-        if "wand" in tags:
-          kind = "wand"
-        elif "potion" in tags:
-          kind = "potion"
-        elif "item_pickup" in tags and "item_physics" in tags:
-          kind = "pickup"
-        else:
-          logger.debug("Unknown item from tags %s", tags)
-      else:
-        kind = "spell"
+      kind = items.classify_item(celem)
       entries.append((kind, celem))
     logger.debug("Inventory contents: %d entries", len(entries))
     for kind, celem in entries:
@@ -234,21 +227,23 @@ class Player:
         iattrs = icomp.attrib
       iname = iattrs.get("item_name")
       idesc = iattrs.get("ui_description")
-      if kind == "wand":
-        pass
-      elif kind == "potion":
+      if kind == items.Kind.CARD: # TODO: interpret
+        self._items.append(("card", iname, idesc))
+      elif kind == items.Kind.WAND: # TODO: interpret
+        self._items.append(("wand", iname, idesc))
+      elif kind == items.Kind.POTION or kind == items.Kind.SACK:
         melem = celem.find("MaterialInventoryComponent")
+        ikind = "potion" if kind == items.Kind.POTION else "sack"
         contents = {}
         for mat in melem.find("count_per_material_type").findall("Material"):
           contents[mat.attrib["material"]] = int(mat.attrib["count"])
-        self._items.append(("potion", iname, idesc, contents))
-      elif kind == "pickup":
+        self._items.append((ikind, iname, idesc, contents))
+      elif kind == items.Kind.EGG: # TODO: interpret
+        self._items.append(("egg", iname, idesc))
+      elif kind == items.Kind.PICKUP: # TODO: elaborate?
         self._items.append(("pickup", iname, idesc))
-        # TODO: handle powder pouches
-      elif kind == "spell":
-        pass
       else:
-        pass
+        logger.warning("Unknown item type %s for %s: %s", kind, iname, idesc)
 
   def _interpret_drug_effects(self, elem):
     "Intrepret the <DrugEffectComponent> node"
