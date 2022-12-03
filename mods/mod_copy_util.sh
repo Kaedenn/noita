@@ -1,16 +1,17 @@
 #!/bin/bash
 
-# Functions used by both of the mod copy scripts
+# Common functions used by both mod copy scripts
 
 # Environment variables:
-#   NOITA_TRACE     set to a non-empty value to print diffs
-#   NOITA_DEBUG     set to a non-empty value to enable debugging
-#   DRY_RUN         set to a non-empty value to enter "dry run mode"
+#   DRY_RUN         if non-empty, enter "dry run mode"
+#   NOCOLOR         if non-empty, disable colors
+#   NOITA_TRACE     if non-empty, print diffs
+#   NOITA_DEBUG     if non-empty, enable debugging
+#   STEAM           alternate path to the Steam root directory
+#   DELETE_BEFORE   if non-empty, rm -r $mod_dest prior to copying
+#   MOD_INCL_PATS   array; can be modified to force include named mods
 #   INC_NODEST      for check_should_compare; always include mods that
 #                   exist in the source but not the destination
-#   DELETE_BEFORE   set to a non-empty value to rm -r the desination
-#                   prior to copying
-#   STEAM           alternate path to the Steam root directory
 
 # Note on diffs: files and directories starting with a period are
 # skipped on compare. This behavior cannot be altered.
@@ -25,21 +26,46 @@
 true; export T=$?
 false; export F=$?
 
+# Always process these mods
+declare -a MOD_INCL_PATS=(
+  "shift_query"
+  "kae_*"
+  "*_k"
+)
+
+# Format a string with a CSI escape sequence
+color() { # <code> <message...>
+  let ncodes=$#-1
+  local IFS=';'
+  local code=${*:1:$ncodes}
+  local msg="${@:$#}"
+  if [[ -z "${NOCOLOR:-}" ]]; then
+    echo -e "\033[${code}m${msg}\033[0m"
+  else
+    echo "${msg}"
+  fi
+}
+
+# Print a diagnostic message of some kind to stderr
+diag() { # <prefix> <message...>
+  echo -e "$1: ${@:2}" >&2
+}
+
 # Print an error message to stderr
 error() { # <message...>
-  echo -e "\033[1;31mERROR\033[0m: $@" >&2
+  diag "$(color 1 31 ERROR)" "$@"
 }
 
 # Print a debugging message to stderr if debugging is enabled
 log() { # <message...>
   if [[ -n "${NOITA_DEBUG:-}" ]]; then
-    echo -e "\033[3mDEBUG\033[0m: $@" >&2
+    diag "$(color 3 96 DEBUG)" "$@"
   fi
 }
 
 # Print an informational message to stderr
 info() { # <message...>
-  echo -e "\033[1mINFO\033[0m: $@" >&2
+  diag "$(color 1 3 INFO)" "$@"
 }
 
 # Execute a command if DRY_RUN is unset, print the command otherwise
@@ -48,7 +74,7 @@ dry() { # <command...>
     $@
     return $?
   else
-    info "DRY: $@"
+    info "$(color 93 DRY): $@"
     return $F
   fi
 }
@@ -76,8 +102,8 @@ checked() { # <command...>
 
 # Locate the Steam base directory or exit with an error if not found
 find_steam() { # no args
-  local -a steam_paths=("$HOME/.steam")
-  local -a steam_links=("steam" "root")
+  declare -a steam_paths=("$HOME/.steam")
+  declare -a steam_links=("steam" "root")
   if [[ -n "${STEAM:-}" ]]; then
     steam_paths+=("$STEAM")
   fi
@@ -116,11 +142,12 @@ list_mods() { # <path>
 
 # Evaluates to true if we should examine the mod having the given name
 check_mod_name() {
-  case "$1" in
-    shift_query) return $T;;
-    kae_*) return $T;;
-    *) return $F;;
-  esac
+  for pat in "${MOD_INCL_PATS[@]}"; do
+    if [[ $1 =~ $pat ]]; then
+      return $T
+    fi
+  done
+  return $F
 }
 
 # Evaluates to true if we should copy the mod to the given directory

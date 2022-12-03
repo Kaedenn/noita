@@ -11,27 +11,32 @@ usage: $0 [-n] [-i DIR] [-D] [-v] [-V] [-h] [MOD...]
 options:
   -n      dry run; do not actually copy anything
   -i DIR  copy mods from DIR instead of from CWD
+  -p PAT  include mods with names matching PAT
   -D      delete destination mod directory before copying
   -v      enable verbose diagnostics
   -V      enable very verbose diagnostics: show diffs
   -h      this message
 
-Any mods specified on the command-line will automatically be considered
-for replication regardless of name.
+Copies all matching mods from DIR to the Noita mods directory. A mod
+"matches" if it satisfies any of the following conditions:
+  * matches any pattern in MOD_INCL_PATS
+  * exists locally but does not exist in the Noita mod directory
 
-All mods that exist locally but do not exist in the Noita mods directory
-will be copied regardless of name.
+Specifying a mod on the command-line will prevent this behavior; only
+the mod(s) specified will be processed.
 EOF
+  declare -p MOD_INCL_PATS >&2
 }
 
 export LOCAL_DIR="$(dirname "$0")"
-while getopts "ni:DvVh" arg; do
+while getopts "nip:DvVh" arg; do
   case "$arg" in
     h) print_help; exit 0;;
     V) export NOITA_TRACE=1;;
     v) export NOITA_DEBUG=1;;
     D) export DELETE_BEFORE=1;;
     i) export LOCAL_DIR="$OPTARG";;
+    p) MOD_INCL_PATS+=("$OPTARG");;
     n) export DRY_RUN=1;;
     *) error "execute $0 -h for usage"; exit 1;;
   esac
@@ -60,22 +65,25 @@ _main() {
     exit 1
   fi
 
-  readarray -t mods < <(list_mods "$mod_source")
   declare -A to_compare=()
-  for modpath in "${mods[@]}"; do
-    local modname="$(basename "$modpath")"
-    local moddest="$mod_dest/$modname"
-    log "scanning $modname ($modpath)"
-    if INC_NODEST=1 check_should_compare "$modpath" "$mod_dest"; then
-      log "adding $modname to the mods to compare"
-      to_compare+=(["$modpath"]="$moddest")
-    fi
-  done
-
-  for modname in "${NAMED_MODS[@]}"; do
-    log "adding specifically named mod $modname"
-    to_compare+=(["$mod_source/$modname"]="$mod_dest/$modname")
-  done
+  if [[ ${#NAMED_MODS[@]} -eq 0 ]]; then
+    readarray -t mods < <(list_mods "$mod_source")
+    for modpath in "${mods[@]}"; do
+      local modname="$(basename "$modpath")"
+      local moddest="$mod_dest/$modname"
+      log "scanning $(color 1 3 $modname) ($modpath)"
+      if INC_NODEST=1 check_should_compare "$modpath" "$mod_dest"; then
+        log "adding $(color 1 3 $modname) to the mods to compare"
+        to_compare+=(["$modpath"]="$moddest")
+      fi
+    done
+  else
+    log "restricting processing to ${#NAMED_MODS[@]} mod(s)"
+    for modname in "${NAMED_MODS[@]}"; do
+      log "adding specifically named mod $(color 1 3 $modname)"
+      to_compare+=(["$mod_source/$modname"]="$mod_dest/$modname")
+    done
+  fi
 
   info "comparing ${#to_compare[@]} mods"
 
@@ -83,9 +91,9 @@ _main() {
     local moddest="${to_compare["$modpath"]}"
     local modroot="$(dirname "$moddest")"
     local modname="$(basename "$modpath")"
-    log "checking $modpath against $moddest..."
+    log "checking $(color 1 3 $modpath) against $(color 1 3 $moddest)..."
     if compare_paths "$modpath" "$moddest"; then
-      info "Deploying $modname to $moddest"
+      info "Deploying $(color 1 3 $modname) to $(color 1 3 $moddest)"
       copy_mod "$modpath" "$modroot"
     else
       log "$modname $moddest is up-to-date with $modpath"
