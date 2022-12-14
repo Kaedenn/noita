@@ -6,15 +6,16 @@ source "$(dirname "$0")/mod_copy_util.sh"
 
 print_help() {
   cat <<EOF >&2
-usage: $0 [-n] [-i DIR] [-D] [-v] [-V] [-h] [MOD...]
+usage: $0 [-n] [-i DIR] [-p PAT] [-D] [-C] [-v|-V] [-h] [MOD...]
 
 options:
   -n      dry run; do not actually copy anything
   -i DIR  copy mods from DIR instead of from CWD
   -p PAT  include mods with names matching PAT
   -D      delete destination mod directory before copying
+  -C      disable color formatting
   -v      enable verbose diagnostics
-  -V      enable very verbose diagnostics: show diffs
+  -V      enable very verbose diagnostics and show diffs
   -h      this message
 
 Copies all matching mods from DIR to the Noita mods directory. A mod
@@ -24,16 +25,18 @@ Copies all matching mods from DIR to the Noita mods directory. A mod
 
 Specifying a mod on the command-line will prevent this behavior; only
 the mod(s) specified will be processed.
+
+MOD_INCL_PATS = (${MOD_INCL_PATS[@]})
 EOF
-  declare -p MOD_INCL_PATS >&2
 }
 
 export LOCAL_DIR="$(dirname "$0")"
-while getopts "nip:DvVh" arg; do
+while getopts "nip:DCvVh" arg; do
   case "$arg" in
     h) print_help; exit 0;;
     V) export NOITA_TRACE=1;;
     v) export NOITA_DEBUG=1;;
+    C) export NOCOLOR=1;;
     D) export DELETE_BEFORE=1;;
     i) export LOCAL_DIR="$OPTARG";;
     p) MOD_INCL_PATS+=("$OPTARG");;

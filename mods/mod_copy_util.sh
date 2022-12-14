@@ -28,9 +28,10 @@ false; export F=$?
 
 # Always process these mods
 declare -a MOD_INCL_PATS=(
-  "shift_query"
-  "kae_*"
-  "*_k"
+  "shift_query"   # custom mod that lists fungal shifts
+  "kae_*"         # all mods starting with "kae_"
+  "k_*"           # all mods starting with "k_"
+  "*_k"           # all mods ending with "_k"
 )
 
 # Format a string with a CSI escape sequence
