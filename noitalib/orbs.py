@@ -89,14 +89,14 @@ class Orb:
 
   def localize(self, langmap):
     "Create a string representing this orb"
-    place = langmap(self.place)
+    place = langmap(self.place, title=True)
     if self.world != WORLD_MAIN:
       wprefix = "$biome_" + self.world
       if self.woffset != 1:
         wprefix += f" x{self.woffset}"
-      place = langmap(wprefix, place)
+      place = langmap(wprefix, place, title=True)
       return f"Orb {self.orbid} from {place}"
-    spell = langmap(self.spell)
+    spell = langmap(self.spell, title=True)
     desc = f"{spell} from {place}".lstrip()
     return f"Orb {self.num} {desc}"
 
@@ -116,7 +116,7 @@ BASE_ORBS = {
   8: Orb(8, "$action_firework", "$biome_boss_victoryroom (Hell)"),
   9: Orb(9, "$action_exploding_deer", "$biome_winter_caves"),
   10: Orb(10, "$action_material_cement", "$biome_wizardcave"),
-  11: Orb(11, "", "Great Treasure Chest")
+  11: Orb(11, "", "$item_chest_treasure_super")
 }
 
 ORBS = {}

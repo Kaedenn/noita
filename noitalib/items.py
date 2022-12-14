@@ -14,6 +14,8 @@ from . import xmltools
 
 logger = utility.loghelper.DelayLogger(__name__)
 
+CONTAINER_SIZE = 1000
+
 class Kind(enum.Enum):
   CARD = enum.auto()    # spells (full menu)
   WAND = enum.auto()    # wands (quick menu)
@@ -22,6 +24,18 @@ class Kind(enum.Enum):
   EGG = enum.auto()     # eggs (quick menu)
   PICKUP = enum.auto()  # items (Kuu, etc) (quick menu)
   OTHER = enum.auto()   # something else
+  @classmethod
+  def get(cls, kind):
+    "Convert a lower-case kind to an enum"
+    return cls[kind.upper()]
+  def __eq__(self, other):
+    "self == other"
+    if isinstance(other, str):
+      return self == Kind.get(other)
+    return self.value == other.value
+  def __hash__(self):
+    "hash(self)"
+    return self.value
 
 def classify_item(entity):
   "Determine which Kind best describes this item"

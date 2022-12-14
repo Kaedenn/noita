@@ -16,11 +16,19 @@ import csv
 import locale
 import os
 
+from . import materials
 import utility.loghelper
 logger = utility.loghelper.DelayLogger(__name__)
 
 TRANSLATIONS = "data/translations/common.csv"
 LANG_FALLBACK = "en"
+
+PERK_MAP = {
+  "wand_radar": "radar_wand",
+  "item_radar": "radar_item",
+  "moon_radar": "radar_moon",
+  "enemy_radar": "radar_enemy"
+}
 
 def plural(num, word):
   "Return '<num> <word>' with <word> plural, if needed"
@@ -117,7 +125,7 @@ class Token:
 
 class LanguageMap:
   "Map tokens to their localized values"
-  def __init__(self, game_path, language=None):
+  def __init__(self, game_path, language=None, defer=False):
     "Construct the map; see help(type(self)) for signature"
     self._game_path = game_path
     self._language = language
@@ -125,7 +133,9 @@ class LanguageMap:
       self._language = get_preferred_language()
     self._languages = []
     self._tokens = {}
-    self.reload_map()
+    self._loaded = False
+    if not defer:
+      self.reload_map()
 
   @property
   def translations_file(self):
@@ -152,6 +162,7 @@ class LanguageMap:
     langs, tokens = load_translations_csv(self.translations_file)
     self._languages = langs
     self._tokens = tokens
+    self._loaded = True
 
   def get(self, token, language=None, insertions=()):
     "Localize a single token with optional insertions"
@@ -166,20 +177,27 @@ class LanguageMap:
     logger.debug("Unknown token %r", token)
     return token
 
-  def localize(self, phrase, *insertions):
+  def localize(self, phrase, *insertions, title=False):
     """
     Localize a word or phrase with optional insertions
 
     Localization is done word-by-word. Words without a leading "$" are
     skipped.
     """
+    if not self._loaded:
+      return (phrase + " " + " ".join(insertions)).rstrip()
+
     result = []
     for word in phrase.split():
       if word.startswith("$"):
         result.append(self.get(word, insertions=insertions))
       else:
         result.append(word)
-    return " ".join(result)
+    final_result = " ".join(result)
+    if title:
+      final_result = final_result.title()
+    logger.trace("localize(%r, *%r) = %r", phrase, insertions, final_result)
+    return final_result
 
   def __iter__(self):
     "Obtain the translation tokens"
@@ -189,25 +207,39 @@ class LanguageMap:
     "Get translations for a given token"
     return self._tokens[token].translations
 
-  def __call__(self, phrase, *insertions):
+  def __call__(self, phrase, *insertions, **kwargs):
     "Alias for self.localize"
-    return self.localize(phrase, *insertions)
+    return self.localize(phrase, *insertions, **kwargs)
 
   # Noita-specific shorthand functions
 
   def material(self, matid, with_as=False):
     "Get the localized name of a material"
-    matstr = self.localize("$mat_" + matid)
+    matid = materials.MATERIAL_MAP.get(matid, matid)
+    matstr = matid
+    if matid.startswith("mat_") or matstr.startswith("material_"):
+      matstr = self.localize("$" + matid)
+    elif "mat_" + matid in self._tokens:
+      matstr = self.localize("$mat_" + matid)
+    elif "material_" + matid in self._tokens:
+      matstr = self.localize("$material_" + matid)
     if with_as and matstr != matid:
       matstr += f" (as {matid})"
     return matstr
 
   def is_material(self, matid):
     "True if the matid is a real material"
-    return "mat_" + matid in self._tokens
+    matid = materials.MATERIAL_MAP.get(matid, matid)
+    if matid.startswith("mat_") or matid.startswith("material_"):
+      return True
+    for prefix in ("mat", "material"):
+      if prefix + "_" + matid in self._tokens:
+        return True
+    return False
 
   def perk(self, perkid, count=1):
     "Get the localized name of a perk"
+    perkid = PERK_MAP.get(perkid, perkid)
     perkstr = self.localize("$perk_" + perkid)
     if count > 0:
       perkstr += f" x{count}"
@@ -215,6 +247,7 @@ class LanguageMap:
 
   def is_perk(self, perkid):
     "True if the perkid is a real perk"
+    perkid = PERK_MAP.get(perkid, perkid)
     return "perk_" + perkid in self._tokens
 
 # vim: set ts=2 sts=2 sw=2:

@@ -50,4 +50,8 @@ def remove_space_tails(node, replace_with=""):
       cnode.tail = replace_with
     remove_space_tails(cnode, replace_with)
 
+def tostring(elem):
+  "Convert an element to a string"
+  return et.tostring(elem).decode()
+
 # vim: set ts=2 sts=2 sw=2:

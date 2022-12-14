@@ -20,6 +20,7 @@ logger = utility.loghelper.DelayLogger(__name__)
 
 AIR_INITIAL = 7
 AIR_DAMAGE_INITIAL = 0.6
+HEART_SIZE = 25
 
 def make_attr_getter(attr):
   "Build a simple wrapper function"
@@ -93,6 +94,9 @@ class Player:
   items = property(make_attr_getter("items"))
   spells = property(make_attr_getter("spells"))
 
+  damages = property(make_attr_getter("damages"))
+  drug_effects = property(make_attr_getter("drug_effects"))
+
   def _interpret(self):
     "Extract information from self._root"
     self._interpret_transform(self._root.find("_Transform"))
@@ -100,7 +104,7 @@ class Player:
     self._interpret_char_data(self._root.find("CharacterDataComponent"))
     # TODO: CharacterPlatformingComponent
     self._interpret_damages(self._root.find("DamageModelComponent"))
-    # TODO: DrugEffectComponent
+    self._interpret_drug_effects(self._root.find("DrugEffectComponent"))
     # TODO: GameLogComponent and GameStatesComponent
     # TODO: GunComponent
     # TODO: HitboxComponent
@@ -131,14 +135,18 @@ class Player:
     self._interpret_wallet(self._root.find("WalletComponent"))
     for elem in self._root.findall("Entity"):
       name = elem.attrib.get("name")
+      tags = elem.attrib.get("tags")
       if name == "arm_r":
         logger.debug("Parsing arm_r %r", elem)
       elif name == "cape":
         logger.debug("Parsing cape %r", elem)
-      elif name == "perk_entity":
+        # TODO: cape stains
+      elif name == "perk_entity" or "perk_entity" in tags:
         logger.debug("Parsing perk entity %r", elem)
+        # TODO
       elif name == "fungal_shift_ui_icon":
         logger.debug("Parsing fungal shift icon %r", elem)
+        # TODO
       elif name == "inventory_quick":
         logger.debug("Parsing quick inventory %r", elem)
         self._interpret_inventory(elem, quick=True)
@@ -148,7 +156,9 @@ class Player:
       else:
         if name is None or name == "":
           name = "<unnamed>"
+        # TODO: try to parse the unnamed entity anyway
         logger.trace("Skipping %s entity %r %r", name, elem, elem.attrib)
+        logger.trace("Value: %s", xmltools.tostring(elem))
     # TODO: Entity name="inventory_quick" for wands/flasks
     # TODO: Entity name="inventory_full" for spells
 
@@ -170,9 +180,14 @@ class Player:
 
   def _interpret_damages(self, elem):
     "Interpret the <DamageModelComponent> node"
-    self._damages = elem.attrib
-    self._health = float(elem.attrib["hp"])
-    self._max_health = float(elem.attrib["max_hp"])
+    hearts = float(elem.attrib["hp"])
+    max_hearts = float(elem.attrib["max_hp"])
+    self._health = round(hearts * HEART_SIZE, 2)
+    self._max_health = round(max_hearts * HEART_SIZE, 2)
+    if self._health == int(self._health):
+      self._health = int(self._health)
+    if self._max_health == int(self._max_health):
+      self._max_health = int(self._max_health)
     self._blood_material = elem.attrib["blood_material"]
     self._blood_spray_material = elem.attrib["blood_spray_material"]
     self._blood_multiplier = elem.attrib["blood_multiplier"]
@@ -186,6 +201,7 @@ class Player:
     mult_elem = elem.find("damage_multipliers")
     for dmg_kind, dmg_mult in mult_elem.attrib.items():
       self._damage_multipliers[dmg_kind] = float(dmg_mult)
+    self._damages = elem.attrib
 
   def _interpret_ingestions(self, elem, override=True):
     "Interpret the <MaterialInventoryComponent _tags='ingestion'> node"
@@ -228,25 +244,25 @@ class Player:
       iname = iattrs.get("item_name")
       idesc = iattrs.get("ui_description")
       if kind == items.Kind.CARD: # TODO: interpret
-        self._items.append(("card", iname, idesc))
+        self._items.append((items.Kind.CARD, iname, idesc))
       elif kind == items.Kind.WAND: # TODO: interpret
-        self._items.append(("wand", iname, idesc))
+        self._items.append((items.Kind.WAND, iname, idesc))
       elif kind == items.Kind.POTION or kind == items.Kind.SACK:
         melem = celem.find("MaterialInventoryComponent")
-        ikind = "potion" if kind == items.Kind.POTION else "sack"
         contents = {}
         for mat in melem.find("count_per_material_type").findall("Material"):
           contents[mat.attrib["material"]] = int(mat.attrib["count"])
-        self._items.append((ikind, iname, idesc, contents))
+        self._items.append((kind, iname, idesc, contents))
       elif kind == items.Kind.EGG: # TODO: interpret
-        self._items.append(("egg", iname, idesc))
+        self._items.append((items.Kind.EGG, iname, idesc))
       elif kind == items.Kind.PICKUP: # TODO: elaborate?
-        self._items.append(("pickup", iname, idesc))
+        self._items.append((items.Kind.PICKUP, iname, idesc))
       else:
         logger.warning("Unknown item type %s for %s: %s", kind, iname, idesc)
 
   def _interpret_drug_effects(self, elem):
     "Intrepret the <DrugEffectComponent> node"
+    logger.trace("Parsing drug effects %r: %r", elem, elem.attrib)
     self._drug_effects = elem.attrib # TODO
 
   def _interpret_game_log(self, elem):

@@ -7,6 +7,8 @@ This script aims to distill information about your Noita installation
 and your sessions played.
 """
 
+# TODO: Color
+
 import argparse
 import datetime
 import glob
@@ -23,6 +25,7 @@ utility.loghelper.tracelog.hotpatch(logging)
 
 # pylint: disable=wrong-import-position
 import noitalib
+from noitalib.items import Kind as ItemKind
 from noitalib.translations import plural as Pl
 import steam.paths
 
@@ -40,14 +43,28 @@ LM_DUMPS = (LM_DUMP_BRIEF, LM_DUMP_VALUE, LM_DUMP_VALUES, LM_DUMP_FULL)
 
 UNSET = "" # Used to differentiate "unset" and "set but with no value"
 
+def format_today(date_format):
+  "Format today's date"
+  return datetime.date.today().strftime(date_format)
+
+def get_indent(num_or_str):
+  "Format the indent string"
+  if isinstance(num_or_str, int):
+    return " "*num_or_str
+  if isinstance(num_or_str, str):
+    return num_or_str
+  return f"{num_or_str}"
+
 def localize_material(material, langmap, with_orig=False):
   "Helper function to localize a material"
-  if not langmap.is_material(material): # failed to localize
-    return material
-  mat_str = langmap.material(material)
-  if not with_orig or mat_str == material:
-    return mat_str.title()
-  return "{} ({})".format(mat_str.title(), material)
+  if langmap.is_material(material):
+    mat_str = langmap.material(material)
+    if not langmap.is_material(mat_str):
+      mat_str = mat_str.title()
+    if with_orig:
+      return "{} ({})".format(mat_str, material)
+    return mat_str
+  return material
 
 def get_saves(saves_path, for_save=None):
   "Get a list of all saves if for_save is None, and a single save otherwise"
@@ -79,7 +96,7 @@ def filter_sessions(sessions, filter_term):
     if filter_term == "last":
       yield sessions[-1]
     elif filter_term == "today":
-      filter_term = datetime.date.today().strftime(noitalib.SESS_DATE_FORMAT)
+      filter_term = format_today(noitalib.SESS_DATE_FORMAT)
       yield from filter_sessions(sessions, filter_term)
     else:
       for session in sessions:
@@ -92,10 +109,15 @@ def filter_sessions(sessions, filter_term):
           yield session
 
 def world_get_orbs(save_dir, wstate, langmap):
-  "Aggregate everything relating to orbs"
-  orbs_have = {oid: noitalib.orbs.get_orb(oid) for oid in wstate.orbs()}
-  orbs_need = [oid for oid in noitalib.orbs.ORBS if oid not in orbs_have]
-  orb_map_str = wstate.lua_globals().get("ORB_MAP_STRING")
+  "Determine the orbs we have, the orbs we need, and where they all are"
+  orbs_have = {}
+  orbs_need = []
+  for oid in noitalib.orbs.ORBS:
+    if wstate.has_orb(oid):
+      orbs_have[oid] = noitalib.orbs.get_orb(oid)
+    else:
+      orbs_need.append(oid)
+  orb_map_str = wstate.getvar("ORB_MAP_STRING")
   orb_map = []
   if orb_map_str:
     for orbxy in orb_map_str.split():
@@ -123,6 +145,8 @@ def print_language_map(langmap, mode, lang_override):
   elif mode not in LM_DUMPS:
     logger.error("Invalid langmap dump mode %r", mode)
     logger.info("Choices are: %s", LM_DUMPS)
+    return
+
   for token in sorted(langmap):
     if mode == LM_DUMP_BRIEF:
       print(token)
@@ -166,14 +190,73 @@ def print_session(save_dir, # TODO: configure detail level
   if show_kills: # TODO
     pass
 
-def print_player(save, player, langmap, detail): # TODO: detail levels
+# Detailed player printers {{{0
+def _print_status_effects(save, player, langmap, detail):
+  "Print the player's status effects"
+  for status, values in player.status_effects().items():
+    if status == "air":
+      continue
+    value_string = " ".join(f"{key}={val}" for key, val in values.items())
+    label = status
+    if langmap.is_material(status):
+      label = "from eating " + localize_material(status, langmap)
+    print("\tEffect {}: {}".format(label, value_string))
+
+def _print_wands(save, player, langmap, detail): # TODO
+  "Print the player's wands"
+  pass
+
+def _print_item(item_def, langmap, detail, indent="\t"):
+  "Print a single item"
+  kind, name, desc = item_def[:3]
+  info = item_def[3] if len(item_def) > 3 else {}
+  iname = langmap(name)
+  idesc = desc
+  if desc.startswith("$"):
+    idesc = langmap(desc)
+    if detail >= Detail.MORE:
+      idesc += " (" + desc + ")"
+  labels = []
+  if info:
+    if detail >= Detail.MORE:
+      labels.append(repr(info))
+    # TODO: Egg contents
+  label = " ".join(labels)
+  indent = get_indent(indent)
+  print("{}{} {!r} {}".format(indent, iname, idesc, label).rstrip())
+  # Print contents
+  if detail >= Detail.NORMAL:
+    if kind in (ItemKind.POTION, ItemKind.PICKUP):
+      indent_str = indent * 2
+      max_size = noitalib.items.CONTAINER_SIZE
+      for material, amount in info.items():
+        content = langmap.material(material)
+        percent = amount * 100 / max_size
+        print("{}{}: {} ({}%)".format(
+          indent_str, content, amount, percent))
+
+def _print_items(save, player, langmap, detail):
+  "Print the player's inventory"
+  for item in player.items:
+    if item[0] in ("wand", "card"):
+      continue
+    _print_item(item, langmap, detail, indent="\t")
+
+def _print_spells(save, player, langmap, detail): # TODO
+  "Print the player's spell inventory"
+  for spell in player.spells:
+    pass
+# 0}}}
+
+def print_player(save, player, langmap, detail): # TODO: add detail level logic
   "Print information about a single player"
   labels = []
   labels.append("HP: {}/{}".format(player.health, player.max_health))
   print("{}: {}".format(save, "; ".join(labels)))
-  blood = localize_material(player.blood_material, langmap)
-  blood_spray = localize_material(player.blood_spray_material, langmap)
-  print("\tPlayer bleeds {} (sprays {})".format(blood, blood_spray))
+  if detail >= Detail.MORE:
+    blood = localize_material(player.blood_material, langmap)
+    blood_spray = localize_material(player.blood_spray_material, langmap)
+    print("\tPlayer bleeds {} (sprays {})".format(blood, blood_spray))
   print("Material damage values:")
   for mat, amt in player.material_damages.items():
     mat_str = localize_material(mat, langmap)
@@ -185,39 +268,19 @@ def print_player(save, player, langmap, detail): # TODO: detail levels
   for mat_kind, mat_count in player.ingestions().items():
     mat_str = localize_material(mat_kind, langmap)
     print("\tIngested {} {}".format(mat_count, mat_str))
-  print("Status effects:")
-  for status, values in player.status_effects().items():
-    if status != "air":
-      label = status
-      val_str = " ".join("{}={}".format(key, val) for key, val in values)
-      if langmap.is_material(status):
-        label = "from eating " + localize_material(status, langmap)
-      print("\tEffect {}: {}".format(label, val_str))
-  print("Wands:")
-  for wand in player.wands: # TODO
-    pass
-  print("Inventory:")
-  for item in player.items: # TODO
-    if item[0] in ("wand", "card"):
+  print("Drug effects:") # TODO
+  for key, value in player.drug_effects.items():
+    if key == "_enabled":
       continue
-    iname = langmap(item[1])
-    if detail >= Detail.MORE:
-      iname += f" ({item[1]})"
-    idesc = item[2]
-    if idesc.startswith("$"):
-      idesc = langmap(idesc)
-      if detail >= Detail.MORE:
-        idesc += " (" + idesc + ")"
-    iinfo = item[3] if len(item) > 3 else {}
-    labels = []
-    if iinfo:
-      labels.append(repr(iinfo))
-    label = " ".join(labels)
-    print("\t{} {!r} {}".format(iname, idesc, label).rstrip())
-    # TODO: format potion/sack contents
+    print(repr("\t{} = {}".format(key, value)))
+  print("Status effects:")
+  _print_status_effects(save, player, langmap, detail)
+  print("Wands:")
+  _print_wands(save, player, langmap, detail)
+  print("Inventory:")
+  _print_items(save, player, langmap, detail)
   print("Spells:")
-  for spell in player.spells: # TODO
-    pass
+  _print_spells(save, player, langmap, detail)
 
 def print_world(save_dir, wstate, langmap, detail=Detail.BASIC):
   "Print a WorldState"
@@ -239,7 +302,7 @@ def print_world(save_dir, wstate, langmap, detail=Detail.BASIC):
     logger.debug("orbs_have = %r", orbs_have)
     for orb_id, orb in sorted(orbs_have.items()):
       label = orb.localize(langmap)
-      print(f"\tCollected orb {orb_id}: {label}")
+      print(f"\tCollected {label}")
     for oid in sorted(orbs_need):
       label = noitalib.orbs.ORBS[oid].localize(langmap)
       if 0 <= oid < len(orb_map):
@@ -388,11 +451,11 @@ Use --steam to specify a different Steam installation directory.
 Noita's Steam App ID is {noitalib.NOITA_APPID}.
 
 -s,--session accepts the following:
-  A date, YYYYMMDD, to select all sessions played that day
-  A date and time, YYYYMMDD-HHMISS, to select a specific session
-  A numeric world seed to select the session by seed
-  The word "today" to select the sessions played today
-  The word "last" to select the most recent session
+  YYYYMMDD to select all sessions played that day
+  YYYYMMDD-HHMISS to select a specific session by start date and time
+  Numeric world seed to select all sessions with that seed
+  "today" to select sessions played today
+  "last" to select the most recent session
 
 --dump-i18n is equivalent to --dump-i18n=brief.
 
@@ -510,9 +573,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
   logger.debug("Noita saves to %s", save_root)
 
   # Initialize the internationalization system
-  langmap = None
-  if not args.no_i18n:
-    langmap = noitalib.translations.LanguageMap(game_path, args.language)
+  langmap = noitalib.translations.LanguageMap(game_path, args.language, defer=args.no_i18n)
 
   # Handle internationalization arguments
   if args.localize:
