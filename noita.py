@@ -17,8 +17,8 @@ import logging
 import os
 
 import utility.collectionfuncs as cfuncs
-import utility.detailenum
-from utility.detailenum import Detail, DETAIL
+import utility.detail
+from utility.detail import Detail, DETAIL
 import utility.loghelper
 from utility.loghelper import LEVEL_CODES
 utility.loghelper.tracelog.hotpatch(logging)
@@ -538,7 +538,7 @@ DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
       det: val.value for det, val in DETAIL.items()})
     for dvalue, dnames in value_map.items():
       dnames_str = ", ".join(dnames).ljust(len("NORMAL, N"))
-      dhelp = utility.detailenum.detail_help(dnames[0])
+      dhelp = utility.detail.detail_help(dnames[0])
       print(f"\t{dnames_str} = {dvalue}: {dhelp}")
     ap.exit()
 
