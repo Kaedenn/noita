@@ -193,6 +193,9 @@ copy_mod() { # <source-path> <dest-root>
       dry checked rm -r "$dest_path"
     fi
   fi
-  dry checked cp -r "$src_path" "$dest_root"
+  if [[ ! -d "$dest_path" ]]; then
+    dry checked mkdir "$dest_path"
+  fi
+  dry checked cp -r "$src_path/*" "$dest_path"
 }
 
