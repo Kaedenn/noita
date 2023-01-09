@@ -30,7 +30,7 @@ AP_LC_LIQUIDS = (
   "poison",
   "radioactive_liquid",
   "swamp",
-  "urine"  ,
+  "urine",
   "water",
   "water_ice",
   "water_swamp",
@@ -64,4 +64,3 @@ MATERIAL_MAP = {
 }
 
 # vim: set ts=2 sts=2 sw=2:
-

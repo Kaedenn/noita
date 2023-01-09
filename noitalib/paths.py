@@ -54,4 +54,31 @@ def get_save_paths(saves_root, for_saves=None):
     results.extend(save_dirs.values())
   return results
 
+def path_resolve(path_arg, prefix, raises=False):
+  "Resolve prefix/path or prefix/../path"
+  if os.path.exists(os.path.join(prefix, path_arg)):
+    return os.path.join(prefix, path_arg)
+  if os.path.exists(os.path.join(prefix, os.pardir, path_arg)):
+    return os.path.realpath(os.path.join(prefix, os.pardir, path_arg))
+  if raises:
+    raise ValueError("Failed to find {!r} in {!r}".format(path_arg, prefix))
+  return path_arg
+
+def resolve_dofile_path(path_arg, mods_path=None, data_path=None, root=None):
+  "Resolve a dofile() or dofile_once() argument"
+  if path_arg.startswith("mods/") and mods_path is not None:
+    result = path_resolve(path_arg, mods_path)
+    if os.path.exists(result):
+      return result
+  if path_arg.startswith("data/") and data_path is not None:
+    result = path_resolve(path_arg, data_path)
+    if os.path.exists(result):
+      return result
+  if root is not None:
+    if os.path.exists(os.path.join(root, path_arg)):
+      return os.path.join(root, path_arg)
+  if os.path.exists(path_arg):
+    return path_arg
+  return None
+
 # vim: set ts=2 sts=2 sw=2:
