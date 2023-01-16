@@ -175,7 +175,7 @@ compare_paths() { # <remote-dir> <local-dir>
     diff_args+=(-q)
   fi
   if [[ -d "$2" ]]; then
-    if diff ${diff_args[@]} -r -x '.*' "$1" "$2"; then
+    if diff ${diff_args[@]} -r -x '.*' -x '*.zip' "$1" "$2"; then
       return $F
     fi
     return $T
