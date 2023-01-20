@@ -8,6 +8,7 @@ mods/*/
 # Swap / temporary files
 *.sw[po]
 README*.html
+*.diff
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
