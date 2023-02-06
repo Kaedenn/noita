@@ -130,7 +130,7 @@ class WorldState:
     "Return information about perk reroll status"
     return {
       "perk_index": self.getvar_int("TEMPLE_NEXT_PERK_INDEX"),
-      "destroy_chance": self.getvar_int("TEMPLE_PERK_DESTROY_CHANCE"),
+      "destroy_chance": self.getvar("TEMPLE_PERK_DESTROY_CHANCE", astype=float),
       "reroll_count": self.getvar_int("TEMPLE_PERK_REROLL_COUNT"),
       "reroll_index": self.getvar_int("TEMPLE_REROLL_PERK_INDEX")
     }
