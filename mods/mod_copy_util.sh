@@ -34,6 +34,11 @@ declare -a MOD_INCL_PATS=(
   "*_k"           # all mods ending with "_k"
 )
 
+# Omit these specific mods
+declare -a MOD_EXCL_PATS=(
+  "cheatgui-k"
+)
+
 # Format a string with a CSI escape sequence
 color() { # <code> <message...>
   let ncodes=$#-1
@@ -142,8 +147,18 @@ list_mods() { # <path>
 }
 
 # Evaluates to true if we should examine the mod having the given name
-check_mod_name() {
+check_include_byname() {
   for pat in "${MOD_INCL_PATS[@]}"; do
+    if [[ $1 =~ $pat ]]; then
+      return $T
+    fi
+  done
+  return $F
+}
+
+# Evaluates to true if we should omit the mod having the given name
+check_exclude_byname() {
+  for pat in "${MOD_EXCL_PATS[@]}"; do
     if [[ $1 =~ $pat ]]; then
       return $T
     fi
@@ -158,10 +173,15 @@ check_mod_name() {
 check_should_compare() { # <src-path> <dest-root>
   local modname="$(basename "$1")"
   local destpath="$2/$modname"
-  if check_mod_name "$modname"; then
+  if check_exclude_byname "$modname"; then
+    log "excluding $modname (as $destpath) by name pattern"
+    return $F
+  elif check_include_byname "$modname"; then
+    log "including $modname (as $destpath) by name pattern"
     return $T
   elif [[ ! -d "$destpath" ]]; then
     if [[ -n "${INC_NODEST:-}" ]]; then
+      log "including $modname (as $destpath) as destination does not exist"
       return $T
     fi
   fi
