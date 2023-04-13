@@ -4,6 +4,11 @@
 Attempt to build reference documentation for Noita Dear-ImGui
 """
 
+# TODO: Improve depth scanning logic using a stack; a closing bracket should
+# discard any open brackets between the closing bracket and its previous match.
+#   { if (x < 1) { return null } }
+#              ^ discard open `<` here
+
 import argparse
 import csv
 import glob
@@ -13,20 +18,13 @@ import os
 import re
 import sys
 
-class TraceLogger(logging.Logger):
-  "Logger subclass defining trace(msg, ...)"
-  TRACE = 5
-  def trace(self, *args, **kwargs):
-    "Log a trace-level message"
-    return self.log(TraceLogger.TRACE, *args, **kwargs, stacklevel=2)
-
-logging.TRACE = TraceLogger.TRACE
-logging.addLevelName(TraceLogger.TRACE, "TRACE")
-logging.setLoggerClass(TraceLogger)
+# Ensure we can import the utility modules
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+from utility import log
+log.hotpatch(logging)
 
 LOG_FORMAT = "%(module)s:%(lineno)s: %(levelname)s: %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.INFO)
-
 logger = logging.getLogger(__name__)
 
 BRACKETS = (
@@ -42,7 +40,7 @@ R_LAMBDA = re.compile("".join((
   r"\[\]",                        # `[]` token
   r"\((?P<args>[^)}]*)\)[ ]*",    # lambda argument list
   r"(->[ ]*(?P<return>[^{]+))?",  # lambda return type (optional)
-  r"(?P<body>{[^}]*})"            # lambda function body { ... }
+  r"(?P<body>{.*})"               # lambda function body { ... }
 )))
 
 # Above, but without the groups (must match exactly!)
@@ -50,7 +48,7 @@ P_LAMBDA = "".join((
   r"\[\]",            # `[]` token
   r"\([^)}]*\)[ ]*",  # lambda argument list
   r"(->[ ]*[^{]+)?",  # lambda return type (optional)
-  r"{[^}]*}"          # lambda function body { ... }
+  r"{.*}"             # lambda function body { ... }
 ))
 
 # [auto thing =] imgui.[func]([name], [data...])
@@ -78,6 +76,120 @@ VALUE_PATTERNS = {_name: re.compile(_value) for _name, _value in {
   "lambda": "(?P<lambda>" + P_LAMBDA + ")",
   "enum-value": "(?P<value>[A-Z][A-Za-z0-9_]+)",
 }.items()}
+
+class BracketParser:
+  """
+  Class to facilitate parsing nested brackets/parentheses/etc
+  """
+  def __init__(self, brackets=BRACKETS):
+    "See help(type(self))"
+    self._brackets = list(brackets)
+    self._bracket_assoc = dict(brackets)
+    self._bracket_set = set()
+    for left, right in self._brackets:
+      self._bracket_set.add(left)
+      self._bracket_set.add(right)
+    self._depths = self.get_empty_depths()
+    self._buffer = []
+    self._stack = []
+
+  def get_empty_depths(self):
+    "Build a dict representing an empty depths association"
+    return {char: 0 for char in self._bracket_assoc}
+
+  def is_left(self, bracket):
+    "True if the bracket is a left bracket"
+    return any(bracket == left for left, _ in self._brackets)
+
+  def is_right(self, bracket):
+    "True if the bracket is a right bracket"
+    return any(bracket == right for _, right in self._brackets)
+
+  def get_other(self, bracket):
+    "Get the other bracket for the given bracket"
+    for left, right in self._brackets:
+      if bracket == left:
+        return right
+      if bracket == right:
+        return left
+    return None
+
+  @property
+  def bufsize(self):
+    "Get the number of characters in the current buffer"
+    return len(self._buffer)
+
+  def buffer(self):
+    "Get the current buffer as a string"
+    return "".join(self._buffer)
+
+  def depths(self):
+    "Get a copy of the current depths assoc"
+    return dict(self._depths)
+
+  def stack(self):
+    "Get a copy of the current parsing stack"
+    return tuple(self._stack)
+
+  def _push_bracket(self, bracket):
+    "Add a bracket to the stack, buffer, and depths"
+    self._depths[bracket] += 1
+    self._stack.append({
+      "pos": self.bufsize,
+      "char": bracket
+    })
+    self._buffer.append(bracket)
+
+  def _pop_bracket(self, bracket):
+    "Remove a bracket from the stack and extract the balanced token"
+    open_bracket = self.get_other(bracket)
+    frame = None
+    while len(self._stack) > 0:
+      frame = self._stack.pop() # failure to find shouldn't clear stack
+      if frame["char"] == open_bracket:
+        break
+      logger.debug("Skipping half-open bracket %r", frame)
+    # TODO
+
+  def feed_one(self, char):
+    "Feed a single character to the parser"
+    if char in self._bracket_set:
+      if char in self._bracket_assoc:
+        # left bracket
+        # TODO
+        pass
+      else:
+        # right bracket
+        # TODO
+        pass
+
+  def feed(self, line):
+    "Feed text to the parser logic"
+    depths_start = self.depths()
+    for char in line:
+      if char not in self._bracket_set:
+        self._buffer.append(char)
+        continue
+      # TODO
+
+  def reset(self):
+    "Mark the end of the parsing logic and obtain any unfinished code"
+    result = self.buffer()
+    self._depths = self.get_empty_depths()
+    self._buffer = []
+    self._stack = []
+    return result
+
+  def __len__(self):
+    "Convenience wrapper for self.bufsize"
+    return self.bufsize
+
+  def __str__(self):
+    "str(self)"
+    return "BracketParser(buffer={!r}, depths={}, stack={})".format(
+        self._buffer, self._depths, self._stack)
+
+  __repr__ = __str__
 
 def is_bracket(char):
   "True if the character is a bracket, False otherwise"
@@ -254,6 +366,13 @@ def comma_split(code, trim=False):
     values.append(piece)
   return values
 
+def value_strip(thedict):
+  "Strip every string value in the given dict"
+  for key in thedict:
+    if isinstance(thedict[key], str):
+      thedict[key] = thedict[key].strip()
+  return thedict
+
 # TODO: sol::overload<FuncType>(func1, func2, ...)
 # TODO: propagate return types across overloads; they all return the same thing
 def parse_function(text):
@@ -281,7 +400,23 @@ def parse_function(text):
     funcinfo.update(**groups)
   if not funcinfo:
     logger.warning("Parsing line %r failed", text)
-  return funcinfo
+    return funcinfo
+
+  # parse specific things directly
+  if funcinfo["kind"] == "lambda":
+    match = R_LAMBDA.match(funcinfo["lambda"])
+    if match is not None:
+      funcinfo.update(**groups)
+    else:
+      logger.warning("Recursive parse of lambda %r failed", funcinfo["lambda"])
+  elif funcinfo["kind"] == "overload":
+    funcinfo["functions"] = []
+    for piece_full in comma_split(funcinfo["overloads"]):
+      piece = piece_full.strip()
+      pieceinfo = parse_function(piece)
+      pieceinfo["text"] = piece
+      funcinfo["functions"].append(pieceinfo)
+  return value_strip(funcinfo)
 
 def parse_enum(text):
   "Parse an enum to extract whatever information we can deduce about it"
@@ -303,7 +438,7 @@ def parse_enum(text):
       for name, value in zip(rvalues[::2], rvalues[1::2]))
   return result
 
-def parse_usertype(text):
+def parse_usertype(text): # TODO
   "Parse a usertype to extract whatever information we can deduce about it"
   return {}
 
@@ -368,14 +503,32 @@ def main():
   mg.add_argument("-c", "--csv", action="store_true", help="generate CSV")
   mg.add_argument("-j", "--json", action="store_true", help="generate JSON")
   ag = ap.add_argument_group("diagnostics")
+  ag.add_argument("-C", "--no-color", action="store_true",
+      help="disable logging colors")
+  ag.add_argument("--color-quotes", action="store_true",
+      help="apply color to quoted logging messages")
+  ag.add_argument("--quote-char", metavar="CHAR", default=log.QUOTE_CHAR,
+      help="use this character for quoting color (default: %(default)r)")
+  ag.add_argument("--dump-color-table", action="store_true",
+      help="dump the logging color setup for debugging")
   mg = ag.add_mutually_exclusive_group()
-  mg.add_argument("-v", "--verbose", action="store_true", help="verbose output")
-  mg.add_argument("-t", "--trace", action="store_true", help="trace output")
+  mg.add_argument("-e", "--errors", action="store_const", const=logging.ERROR,
+      dest="level", help="disable diagnostics below errors")
+  mg.add_argument("-w", "--warnings", action="store_const", const=logging.WARNING,
+      dest="level", help="disable diagnostics below warnings")
+  mg.add_argument("-v", "--verbose", action="store_const", const=logging.DEBUG,
+      dest="level", help="enable verbose output")
+  mg.add_argument("-t", "--trace", action="store_const", const=logging.TRACE,
+      dest="level", help="enable trace output")
   args = ap.parse_args()
-  if args.verbose:
-    logger.setLevel(logging.DEBUG)
-  if args.trace:
-    logger.setLevel(logging.TRACE)
+  if not args.no_color:
+    logger.enableColor(quote_format=args.color_quotes,
+        quote_char=args.quote_char)
+  if args.level:
+    logger.setLevel(args.level)
+
+  if args.dump_color_table:
+    logger.getColorFormatter().dumpDebug()
 
   decls = []
   for file_path in get_lua_decl_files(args.path):
