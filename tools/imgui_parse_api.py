@@ -62,6 +62,11 @@ R_DECL = re.compile("".join((
   r"\);$"                           # end of argument list
 )))
 
+# Function type "rtype(args...)"
+R_FUNCTYPE = re.compile("".join((
+  r"(?P<return>[^\(]*)\((?P<args>(.*))\)"
+)))
+
 P_SYMBOL = r"([A-Z_][A-Za-z0-9_]*::)?[A-Z_][A-Za-z0-9_]*"
 
 VALUE_PATTERNS = {_name: re.compile(_value) for _name, _value in {
@@ -262,6 +267,89 @@ def update_depths(depths, line):
       logger.trace("%r: no change", line)
   return total
 
+def remap_type(typename):
+  "Map a C or C++ type to something more Lua-friendly"
+  # Don't break if we're given None, an empty string, or an empty list/tuple
+  if not typename:
+    return "<unknown>"
+
+  # We do handle ["typename", "varname"] pairs or ["typename"] singletons
+  if isinstance(typename, (list, tuple)):
+    typepart = typename[0]
+    varpart = "<unnamed>"
+    if len(typename) > 1:
+      if len(typename) > 2:
+        logger.warning("Too many components to type %r", typename)
+      varpart = typename[1]
+    return " ".join(remap_type(typepart), varpart)
+
+  # Everything else must be strings
+  if not isinstance(typename, str):
+    logger.warning("Invalid remap_type argument %r", typename)
+    return repr(typename)
+
+  # Perform specific remaps for common C or C++ types
+
+  typename = typename.replace("sol::object*", "object")
+  typename = typename.replace("sol::this_state", "this")
+  typename = typename.replace("std::string", "ref string")
+  typename = typename.replace("const char*", "string")
+  typename = typename.replace("sol::table", "table")
+
+  if typename.startswith("std::optional<"):
+    _, targs = template_split(typename, recurse=False)
+    if not targs:
+      logger.warning("Failed to extract std::optional argument from %r",
+          typename)
+      return typename
+
+    if len(targs) > 1:
+      logger.warning("std::optional only takes one argument; %r has %d",
+          typename, len(targs))
+    return remap_type(targs[0])
+
+  if typename.startswith("std::tuple<"):
+    _, targs = template_split(typename, recurse=False)
+    targs = [remap_type(targ) for targ in targs]
+    return "[" + ", ".join(targs) + "]"
+
+  if typename.endswith("*") or "* " in typename:
+    typename = "ref " + typename.replace("*", "", 1)
+
+  if typename.startswith("std::tuple<"):
+    typenames = typename[typename.index("<")+1:typename.rindex(">")]
+    subtypes = comma_split(typenames, trim=True)
+    return "[" + ", ".join(remap_type(subtype) for subtype in subtypes) + "]"
+
+  return typename
+
+def template_split(value, recurse=True):
+  "Extract template class and template arguments"
+  if "<" not in value:
+    return value, None
+  lpos = value.find("<") + 1
+  rpos = len(value)
+
+  # Find the matching bracket (when the depth goes from 0 to -1)
+  depth = 0
+  for pos, char in enumerate(value[lpos:]):
+    if char == "<":
+      depth += 1
+    elif char == ">":
+      depth -= 1
+    if depth < 0:
+      rpos = lpos + pos
+      break
+  if rpos >= len(value) or value[rpos] != ">":
+    logger.warning("Parsing template %r failed [%d, %d]", value, lpos, rpos)
+
+  ttype = value[:lpos-1]
+  targs = comma_split(value[lpos:rpos], trim=True)
+  logger.debug("Parsed %s %s from %s[%d:%d]", ttype, targs, value, lpos, rpos)
+  if recurse:
+    targs = [template_split(targ, recurse=True) for targ in targs]
+  return ttype, targs
+
 def get_declarations(file_path):
   "Extract the C++ source code declarations from the given file"
   file_name = os.path.basename(file_path)
@@ -373,15 +461,15 @@ def value_strip(thedict):
       thedict[key] = thedict[key].strip()
   return thedict
 
-# TODO: sol::overload<FuncType>(func1, func2, ...)
-# TODO: propagate return types across overloads; they all return the same thing
 def parse_function(text):
   "Parse a function to extract whatever information we can deduce about it"
-  if text.startswith("sol::readonly("):
-    logger.debug("Purging readonly from %r", text)
-    text = text[text.index("(")+1:text.rindex(")")]
-
   funcinfo = {}
+
+  #if text.startswith("sol::readonly("):
+  #  logger.debug("Purging readonly from %r", text)
+  #  text = text[text.index("(")+1:text.rindex(")")]
+  #  funcinfo["readonly"] = True
+
   for patname, pattern in VALUE_PATTERNS.items():
     match = pattern.match(text)
     if match is None:
@@ -398,17 +486,34 @@ def parse_function(text):
       logger.warning("prior: %r", funcinfo)
     funcinfo["kind"] = patname
     funcinfo.update(**groups)
+
   if not funcinfo:
     logger.warning("Parsing line %r failed", text)
     return funcinfo
 
-  # parse specific things directly
+  # Extract return type and parameter list from function type
+  if funcinfo.get("type"):
+    logger.debug("Parsing type %r for %r", funcinfo["type"], text)
+    match = R_FUNCTYPE.match(funcinfo["type"])
+    if match is not None:
+      groups = value_strip(match.groupdict())
+      funcinfo["return"] = groups["return"]
+      funcinfo["args"] = comma_split(groups["args"], trim=True)
+    else:
+      logger.warning("Parsing type %r (of %r) failed", funcinfo["type"], text)
+
+  # Extract the return type, argument list, and body of a lambda
   if funcinfo["kind"] == "lambda":
     match = R_LAMBDA.match(funcinfo["lambda"])
     if match is not None:
+      groups = value_strip(match.groupdict())
+      if groups.get("args"):
+        groups["args"] = comma_split(groups["args"], trim=True)
       funcinfo.update(**groups)
     else:
       logger.warning("Recursive parse of lambda %r failed", funcinfo["lambda"])
+
+  # Extract each overload and parse them separately
   elif funcinfo["kind"] == "overload":
     funcinfo["functions"] = []
     for piece_full in comma_split(funcinfo["overloads"]):
@@ -416,6 +521,35 @@ def parse_function(text):
       pieceinfo = parse_function(piece)
       pieceinfo["text"] = piece
       funcinfo["functions"].append(pieceinfo)
+
+    rtypes = [fun["return"] for fun in funcinfo["functions"] if fun["return"]]
+    num_rtypes = len(rtypes)
+    num_funcs = len(funcinfo["functions"])
+    if not rtypes:
+      logger.warning("No return types for functions %s", funcinfo)
+    elif num_rtypes != num_funcs:
+      if len(set(rtypes)) != 1:
+        logger.warning("Inconsistent return types %r (%d of %d, %d unique)",
+            rtypes, num_rtypes, num_funcs, len(set(rtypes)))
+        logger.warning("While processing funcinfo %r", funcinfo)
+      else:
+        for func in funcinfo["functions"]:
+          if not func["return"]:
+            func["return"] = rtypes[0]
+
+  # If we didn't find a name but have a function reference, use that
+  if not funcinfo.get("name") and funcinfo.get("function"):
+    funcinfo["name"] = funcinfo["function"]
+    # Strip any ImGui:: prefix 
+    if funcinfo["name"].startswith("ImGui::"):
+      funcinfo["name"] = funcinfo["name"][len("ImGui::"):]
+
+  # Apply type transformations to the return type and arguments
+  if funcinfo.get("return"):
+    funcinfo["return"] = remap_type(funcinfo["return"])
+  if funcinfo.get("args"):
+    funcinfo["args"] = [remap_type(arg) for arg in funcinfo["args"]]
+
   return value_strip(funcinfo)
 
 def parse_enum(text):
@@ -489,11 +623,44 @@ def dump_json(matches, to_fobj=sys.stdout):
   json.dump(matches, to_fobj, indent=2)
   to_fobj.write(os.linesep)
 
+def dump_function_plain(funcdef, parent=None, to_fobj=sys.stdout):
+  "Dump a single function to the file object"
+  rtype = funcdef.get("return")
+  if not rtype:
+    #logger.warning("Untyped function %r", funcdef)
+    rtype = "<unknown>"
+
+  args = []
+  for arg in funcdef.get("args", ()):
+    if isinstance(arg, (list, tuple)):
+      if len(arg) == 1:
+        args.append(f"<unknown> {arg}")
+      else:
+        args.append(f"{arg[0]} {arg[1]}")
+    else:
+      args.append(arg)
+
+  name = funcdef.get("name")
+  if not name and parent is not None:
+    name = parent.get("name")
+  if not name:
+    logger.warning("Unnamed function %r", funcdef)
+    if parent is not None:
+      logger.warning("With unnamed parent %r", parent)
+    name = "<unnamed>"
+
+  to_fobj.write(f"{rtype} {name}({', '.join(args)})\n")
+
 def dump_plain(matches, to_fobj=sys.stdout):
   "Dump the matches to the file object as normal text"
   for match in matches:
-    print("{} imgui.{} = {!r}".format(
-      match["func"], match["name"], match["value"]))
+    if match["parse-kind"] == "function":
+      mdata = match["data"]
+      if mdata["kind"] == "overload":
+        for submatch in mdata["functions"]:
+          dump_function_plain(submatch, parent=match, to_fobj=to_fobj)
+      else:
+        dump_function_plain(mdata, parent=match, to_fobj=to_fobj)
 
 def main():
   ap = argparse.ArgumentParser()
