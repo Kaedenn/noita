@@ -3,6 +3,7 @@
 -- STRUCTURE ----------------------------------------------------------
 
 kae
+  .range(start, stop, step)
   .sort
     cmp3(value1, value2)
     cmp3_name(entry1, entry2)
@@ -44,6 +45,37 @@ So you can do something like `k.t.merge(table1, table2)`.
 
 Set _G.libkae_do_test = true to invoke this module's self-test
 functions.
+
+-- NUMERIC UTILITIES --------------------------------------------------
+
+kae.range(start = 1, stop, step = 1)
+  Generate a sequence of numbers from start to stop, inclusive. Acts
+  similarly to Python's range() function, except that values start at
+  one instead of zero and both endpoints are inclusive.
+
+  The resulting sequence is empty if the start and stop are improperly
+  ordered with respect to step:
+    range(1, -2)      yields nothing
+    range(-2)         equivalent to above; yields nothing
+    range(10, 1)      yields nothing
+    range(1, 10, -1)  yields nothing
+
+  An error is raised if #args == 0 or #args > 3.
+  An error is raised if step is 0.
+
+  Usage:
+    for idx in kae.range(10) do ... end
+
+  kae.range(stop)         === kae.range(1, stop, 1)
+  kae.range(start, stop)  === kae.range(start, stop, 1)
+
+  kae.range(10)         -> 1 2 3 4 5 6 7 8 9 10
+  kae.range(1, 10)      -> 1 2 3 4 5 6 7 8 9 10
+  kae.range(1, 10, 1)   -> 1 2 3 4 5 6 7 8 9 10
+  kae.range(1, 10, 2)   -> 1 3 5 7 9
+  kae.range(10, 1, -1)  -> 10 9 8 7 6 5 4 3 2 1
+  kae.range(10, 1, -2)  -> 10 8 6 4 2
+  kae.range(-10, 1)     -> -10 -9 -8 -7 -6 -5 -4 -3 -2 -1 0 1
 
 -- SORTING OPERATIONS -------------------------------------------------
 
@@ -319,6 +351,48 @@ kae = {
 
   },
 
+  --[[ Generate a range of numbers from start..stop by step, inclusive ]]
+  range = function (...)
+    local args = {...}
+    local tbl = {
+      start = 1,
+      stop = 0,
+      step = 1
+    }
+    if #args == 1 then
+      tbl.stop = args[1]
+    elseif #args == 2 then
+      tbl.start = args[1]
+      tbl.stop = args[2]
+    elseif #args == 3 then
+      tbl.start = args[1]
+      tbl.stop = args[2]
+      tbl.step = args[3]
+      if tbl.step == 0 then
+        error("range(...) step must not be zero")
+      end
+    elseif #args > 3 then
+      error("too many arguments to range(...)")
+    else
+      error("too few arguments to range(...)")
+    end
+
+    local function next_func(itable, curr)
+      if itable.step > 0 then
+        if itable.start > itable.stop then return nil end
+        if curr == nil then return itable.start end
+        if curr + itable.step > itable.stop then return nil end
+      end
+      if itable.step < 0 then
+        if itable.start < itable.stop then return nil end
+        if curr == nil then return itable.start end
+        if curr + itable.step < itable.stop then return nil end
+      end
+      return curr + itable.step
+    end
+    return next_func, tbl, nil
+  end,
+  
   -- Table functions
   table = {
 
