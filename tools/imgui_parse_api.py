@@ -290,7 +290,7 @@ def remap_type(typename):
 
   # Perform specific remaps for common C or C++ types
 
-  typename = typename.replace("sol::object*", "object")
+  typename = typename.replace("sol::object", "object")
   typename = typename.replace("sol::this_state", "this")
   typename = typename.replace("std::string", "ref string")
   typename = typename.replace("const char*", "string")
@@ -313,8 +313,8 @@ def remap_type(typename):
     targs = [remap_type(targ) for targ in targs]
     return "[" + ", ".join(targs) + "]"
 
-  if typename.endswith("*") or "* " in typename:
-    typename = "ref " + typename.replace("*", "", 1)
+  #if typename.endswith("*") or "* " in typename:
+  #  typename = "ref " + typename.replace("*", "", 1)
 
   if typename.startswith("std::tuple<"):
     typenames = typename[typename.index("<")+1:typename.rindex(">")]
