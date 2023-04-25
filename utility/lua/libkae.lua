@@ -3,33 +3,52 @@
 -- STRUCTURE ----------------------------------------------------------
 
 kae
-  .range(start, stop, step)
-  .formatter(format_string, ...static_values)
+  .range(start, stop, step) -> iterable of number
+  .formatter(format_string, ...static_values) -> function(...) -> string
   .sort
-    cmp3(value1, value2)
-    cmp3_name(entry1, entry2)
-    cmp3_type(entry1, entry2)
-    cmp3_value(entry1, entry2)
-    chain3(cmp3_functions...)
-    from_cmp3(cmp3_function)
-    reverse(sort_function)
+    .type_order[type_name] -> number
+    .self_comparable(type_name) -> boolean
+    .cmp3(value1, value2) -> number
+    .cmp3_name(entry1, entry2) -> number
+    .cmp3_type(entry1, entry2) -> number
+    .cmp3_value(entry1, entry2) -> number
+    .get3(cmp3_func_name) -> cmp3_func
+    .chain3(cmp3_func...) -> cmp3_func
+    .reverse3(cmp3_func) -> cmp3_func
+    .cmp_name(entry1, entry2) -> boolean
+    .cmp_type(entry1, entry2) -> boolean
+    .cmp_value(entry1, entry2) -> boolean
+    .get(cmp_func_name) -> cmp_func
+    .chain(cmp_func...) -> cmp_func
+    .reverse(cmp_func) -> cmp_func
+    .from_cmp3(cmp3_function) -> cmp_func
   .table
-    .merge(table1, table2)
-    .update(table1, table2)
-    .count(table)
-    .print(table[, conf={}])
-    .tostring(table[, conf={}])
+    .unpack(table) -> object...
+    .pack(object...) -> table
+    .merge(table1, table2) -> table
+    .update(table1, table2) -> table
+    .count(table) -> number
+    .has(table, key) -> boolean
+    .iter(table, cmp_func=kae.sort.cmp3_name) -> iterable of key, value
+    .print(table, conf={})
+    .p = .print
+    .tostring(table, conf={}) -> string
+    .s = .tostring
   .array
-    .count(table)
-    .concat(table1, table2)
-    .extend(table1, table2)
-    .print(table[, conf={}])
+    .count(table) -> number
+    .has(table, value) -> boolean
+    .concat(table1, table2) -> table
+    .extend(table1, table2) -> table
+    .join(table, sep_string=",", value_format="%s") -> string
+    .print(table, conf={})
   .string
-    .at(string, index)
-    .each(string)
-    .escape(string, quote = '"')
-    .quote(string, quote = '"')
-    .isprint(string)
+    .keywords[index] -> string
+    .is_keyword(keyword) -> boolean
+    .at(string, index) -> char
+    .each(string, as_byte=false) -> iterable of index, char
+    .escape(string, quote='"') -> string
+    .quote(string, quote='"') -> string
+    .isprint(string) -> boolean
   .op
     table of "oper": { n = #, names = {}, func = function }
   .operator
@@ -121,11 +140,37 @@ kae.sort.cmp3_value(entry1, entry2)
 kae.sort.chain3(cmp3_functions...)
   Chain two or more three-way-comparison functions
 
+kae.sort.get3(cmp3_func)
+  Get a three-way comparison function by name, or just ensure the
+  cmp3_func argument is a function. Returns nil on unknown cmp3_func.
+
+kae.sort.reverse3(cmp3_func)
+  Get a three-way comparison function that is the inverse of the one
+  given (-1 -> 1, 1 -> -1, 0 -> 0).
+
+kae.sort.cmp_name(entry1, entry2)
+  return entry1.name < entry2.name
+
+kae.sort.cmp_type(entry1, entry2)
+  return entry1.type < entry2.type
+
+kae.sort.cmp_value(entry1, entry2)
+  return entry1.value < entry2.value
+
+kae.sort.get(cmp_func)
+  Behaves identically to kae.sort.get3.
+
+kae.sort.chain(cmp_functions...)
+  Get a binary comparison function that tests a sequence of binary
+  comparison functions and returns the first non-equal result. This
+  allows for collation first by type, then by key, etc.
+
 kae.sort.from_cmp3(cmp3_function)
   Convert a cmp3 function to something table.sort understands
 
 kae.sort.reverse(sort_function)
-  Build a sorting function that's the reverse of the one given.
+  Build a sorting function that's the reverse of the one given
+  (false -> true, true -> false).
 
 -- TABLE OPERATIONS ---------------------------------------------------
 
@@ -143,14 +188,25 @@ kae.table.update(table1, table2) -> table
 kae.table.count(table) -> number
   Count the number of fields defined in the table.
 
-kae.table.iter(table[, cmp_func])
-  Iterate over the table in ascending order. The optional comparison
-  function has the following behavior:
-    function (first_entry, second_entry)
-      return first_entry.key < second_entry.key
+kae.table.iter(table, cmp_func=kae.sort.cmp_name)
+  Iterate over the table in ascending order. The optional cmp_func is a
+  binary comparison operator `function(left, right) -> boolean`:
+    cmp_func = function(first, second)
+      return first < second
     end
-  where the entries are tables of {key=key, type=type, val=val}
-  Default behavior compares just the keys.
+  Assuming `table[key]=value`, `first` and `second` are tables with the
+  following entries:
+    {
+      ["name"]=key,           entry key
+      ["type"]=type(value),   entry value's type
+      ["value"]=value         entry value
+    }
+  The following comparison functions are available for convenience:
+    kae.sort.cmp_name         sort by key
+    kae.sort.cmp_type         sort by value's type
+    kae.sort.cmp_value        sort by value
+  However, any binary function returning a boolean can be used. The
+  default sort function is kae.sort.cmp_name.
 
   To group entries by their type, use
     function (entry1, entry2)
@@ -207,7 +263,15 @@ kae.array.concat(table1, table2)
 kae.array.extend(table1, table2)
   Append the entries of table2 to table1, in-place.
 
-kae.array.print(table[, conf={}])
+kae.array.join(table, sep_string=",", value_format=kae.formatter("%s"))
+  Concatenate an array into a single string using the given separator
+  character and the value formatting function.
+
+  value_format can be nil to use "%s", a string, a function taking one
+  argument, or a table with the "call" metamethod defined. Any other
+  type will raise an error.
+
+kae.array.print(table, conf={})
   Call kae.table.print() with the following implicit configuration:
     conf.iprint = true
     conf.format = function(varname, index, value)
@@ -389,7 +453,7 @@ kae = {
       return kae.sort.cmp3(entry1.value, entry2.value)
     end,
 
-    -- Get the associated sort function
+    -- Get the associated three-way comparison function
     get3 = function(func)
       if type(func) == "function" then return func end
       if func == "name" then return kae.sort.cmp3_name end
@@ -413,10 +477,55 @@ kae = {
       end
     end,
 
-    -- Convert a sort3 function to a normal Lua table.sort function
-    from_cmp3 = function(cmp3_func)
+    -- Create a sort3 function with reversed ordering
+    reverse3 = function(cmp3_func)
+      return function(...)
+        return -cmp3_func(...)
+      end
+    end,
+
+    -- As above, but as a binary comparison operator
+    cmp_name = function(entry1, entry2)
+      return entry1.name < entry2.name
+    end,
+
+    -- As above, but as a binary comparison operator
+    cmp_type = function(entry1, entry2)
+      return entry1.type < entry2.type
+    end,
+
+    -- As above, but as a binary comparison operator
+    cmp_value = function(entry1, entry2)
+      return entry1.value < entry2.value
+    end,
+
+    -- Get the associated binary comparison function
+    get = function(func)
+      if type(func) == "function" then return func end
+      if func == "name" then return kae.sort.cmp_name end
+      if func == "type" then return kae.sort.cmp_type end
+      if func == "value" then return kae.sort.cmp_value end
+      return nil
+    end,
+
+    -- Chain two or more binary comparison functions
+    chain = function(...)
+      local cmps = {}
+      for _, func in ipairs(kae.table.pack(...)) do
+        table.insert(cmps, kae.sort.get(func))
+      end
       return function(left, right)
-        return cmp3_func(left, right) < 0
+        for _, func in ipairs(cmps) do
+          -- We need a three-way comparison in order to chain these
+          local result1 = func(left, right)
+          local result2 = func(right, left)
+          -- Chain continues if result1 and result2 are both false
+          if result1 or result2 then
+            return result1
+          end
+        end
+        -- Values are equal, which fails less-than
+        return false
       end
     end,
 
@@ -427,10 +536,10 @@ kae = {
       end
     end,
 
-    -- Create a sort3 function with reversed ordering
-    reverse3 = function(cmp3_func)
-      return function(...)
-        return -cmp3_func(...)
+    -- Convert a sort3 function to a normal Lua table.sort function
+    from_cmp3 = function(cmp3_func)
+      return function(left, right)
+        return cmp3_func(left, right) < 0
       end
     end,
 
@@ -500,9 +609,8 @@ kae = {
       for key, val in pairs(tbl) do
         table.insert(temp, {key=key, type=type(val), val=val})
       end
-      table.sort(temp, func or function(e1, e2)
-        return e1.key < e2.key
-      end)
+      local sort_func = func or kae.sort.from_cmp3(kae.sort.cmp3_name)
+      table.sort(temp, sort_func)
 
       for idx, entry in ipairs(temp) do
         temp[entry.key] = idx
@@ -667,17 +775,28 @@ kae = {
       return tbl1
     end,
 
-    -- Convert an array-like table to a string
-    tostring = function(tbl, conf)
-      local iconf = {}
-      if conf then kae.table.merge(iconf, conf) end
-      iconf.iprint = true
-      iconf.format = function(varname, index, val)
-        return ("%s[%s] = %s"):format(varname, index, val)
+    -- Join an array-like table of strings into a single string
+    join = function(tbl, sep_string, value_format)
+      local sep = sep_string or ","
+      local vformat = kae.formatter("%s")
+      if type(value_format) == "string" then
+        vformat = kae.formatter(value_format)
+      elseif type(value_format) == "function" then
+        vformat = value_format
+      elseif type(value_format) == "table" then
+        vformat = function(...) return value_format(...) end
+      elseif value_format ~= nil then
+        error(("invalid value_format type %s"):format(type(value_format)))
       end
-      iconf.printfunc = function(value)
-        table.insert(result_lines, value)
+
+      local result = ""
+      for idx, value in ipairs(tbl) do
+        if idx ~= 1 then
+          result = result .. sep
+        end
+        result = result .. vformat(value)
       end
+      return result
     end,
 
     -- Print an array-like table
