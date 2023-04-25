@@ -4,14 +4,15 @@
 
 kae
   .range(start, stop, step)
+  .formatter(format_string, ...static_values)
   .sort
     cmp3(value1, value2)
     cmp3_name(entry1, entry2)
     cmp3_type(entry1, entry2)
     cmp3_value(entry1, entry2)
     chain3(cmp3_functions...)
-    sort_cmp3(cmp3_function)
-    reverser(sort_function)
+    from_cmp3(cmp3_function)
+    reverse(sort_function)
   .table
     .merge(table1, table2)
     .update(table1, table2)
@@ -77,10 +78,36 @@ kae.range(start = 1, stop, step = 1)
   kae.range(10, 1, -2)  -> 10 8 6 4 2
   kae.range(-10, 1)     -> -10 -9 -8 -7 -6 -5 -4 -3 -2 -1 0 1
 
+-- VALUE HELPERS ------------------------------------------------------
+
+kae.formatter(format_string, ...static_values)
+  Create a function that formats values using a previously-specified
+  format string.
+
+  fmtfunc = kae.formatter("%s.%s = %s", "varname")
+  fmtfunc("key", "value") -> "varname.key = value"
+
 -- SORTING OPERATIONS -------------------------------------------------
 
+kae.sort.type_order
+  Table specifying the collation order for the known Lua datatypes.
+  This table can be modified if desired and new types can be added if
+  necessary.
+
+kae.sort.self_comparable(type_name)
+  True if the given type (as a string) is self-comparable (basically,
+  it's either a number or a string).
+
 kae.sort.cmp3(value1, value2)
-  Compare two values, allowing for nil. For simplicity, all == nil.
+  Compare two values, allowing for nil. For simplicity, nil is assumed
+  to be less than everything but equal to itself. The collation order
+  is ascending and roughly as follows:
+  1. if types are the same and the type is self-comparable, then just
+     compare the two values and return -1, 0, or 1 for LT, EQ, and GT.
+  2. if the types are different, use the collation order given by
+     kae.sort.type_order.
+  3. nil values collate after non-nil values
+  4. values of unknown types collate last
 
 kae.sort.cmp3_name(entry1, entry2)
   cmp3(entry1.name, entry2.name)
@@ -94,10 +121,10 @@ kae.sort.cmp3_value(entry1, entry2)
 kae.sort.chain3(cmp3_functions...)
   Chain two or more three-way-comparison functions
 
-kae.sort.sort_cmp3(cmp3_function)
+kae.sort.from_cmp3(cmp3_function)
   Convert a cmp3 function to something table.sort understands
 
-kae.sort.reverser(sort_function)
+kae.sort.reverse(sort_function)
   Build a sorting function that's the reverse of the one given.
 
 -- TABLE OPERATIONS ---------------------------------------------------
@@ -136,10 +163,10 @@ kae.table.iter(table[, cmp_func])
 kae.table.print(table[, conf={}])
   Format and print a table. The following configuration options are
   available:
-    KEY       TYPE        DEFAULT VALUE
+    KEY       TYPE        DEFAULT
     name      string      "table"
     iprint    boolean     false
-    printfunc function    function(line) print(line) end
+    printfunc function    print
     sort      boolean     true
     reverse   boolean     false
     sortfunc  function    kae.sort.label_bytype
@@ -236,27 +263,76 @@ TODO
 -- TESTING UTILITIES --------------------------------------------------
 
 TODO
+
 --]]
 
 kae = {
 
-  -- Sorting functions
+  --[[ Generate a range of numbers from start..stop by step, inclusive ]]
+  range = function (...)
+    local args = kae.table.pack(...)
+    local tbl = { start = 1, stop = 0, step = 1 }
+    if #args == 1 then
+      tbl.stop = args[1]
+    elseif #args == 2 then
+      tbl.start = args[1]
+      tbl.stop = args[2]
+    elseif #args == 3 then
+      tbl.start = args[1]
+      tbl.stop = args[2]
+      tbl.step = args[3]
+      if tbl.step == 0 then
+        error("range(...) step must not be zero")
+      end
+    elseif #args > 3 then
+      error("too many arguments to range(...)")
+    else
+      error("too few arguments to range(...)")
+    end
+
+    local function next_func(itable, curr)
+      if itable.step > 0 then
+        if itable.start > itable.stop then return nil end
+        if curr == nil then return itable.start end
+        if curr + itable.step > itable.stop then return nil end
+      end
+      if itable.step < 0 then
+        if itable.start < itable.stop then return nil end
+        if curr == nil then return itable.start end
+        if curr + itable.step < itable.stop then return nil end
+      end
+      return curr + itable.step
+    end
+    return next_func, tbl, nil
+  end,
+
+  --[[ Create a string formatter function that allows curried arguments ]]
+  formatter = function (format_string, ...)
+    local static_args = kae.table.pack(...)
+    return function(...)
+      local full_args = kae.array.concat(static_args, kae.table.pack(...))
+      return string.format(format_string, kae.table.unpack(full_args))
+    end
+  end,
+
+  --[[ Sorting functions ]]
   sort = {
 
-    -- Types collate in the following order. This table can be modified
-    -- if desired (and/or if a Lua implementation defines more types).
-    -- Types not listed will collate before all other types.
+    -- Types collate according to the following order. This table can
+    -- be modified if desired (and/or if a Lua implementation defines
+    -- more types). Types not listed will use "max".
     type_order = {
-      number = 1,
-      string = 2,
-      table = 3,
-      ["function"] = 4,
-      userdata = 5,
-      ["nil"] = 6,
+      ["number"] = 10,
+      ["string"] = 20,
+      ["table"] = 30,
+      ["function"] = 40,
+      ["userdata"] = 50,
+      ["nil"] = 60,       -- nil collates last
+      max = 100,          -- for unknown types
     },
 
-    -- True if the type has a valid less-than operator with itself
-    is_comparable = function(type_name)
+    -- True if the type is less-than-comparable with itself
+    self_comparable = function(type_name)
       if type_name == "number" then return true end
       if type_name == "string" then return true end
       if type_name == "table" then return false end
@@ -266,8 +342,7 @@ kae = {
       return false
     end,
 
-    -- Three-way compare two values, allowing for nil
-    -- Note that nil collates last (nil > not-nil)
+    -- Three-way compare two values, with nil collating last
     cmp3 = function(value1, value2)
       -- all types support identity
       if value1 == value2 then return 0 end
@@ -280,18 +355,21 @@ kae = {
       -- not all types are comparable; see if we need special logic
       local type1, type2 = type(value1), type(value2)
       if type1 == type2 then
-        if not kae.sort.is_comparable(type1) then
+        if not kae.sort.self_comparable(type1) then
           -- same type, not comparable: compare their string values
           value1 = tostring(value1)
           value2 = tostring(value2)
         end
+        if value1 == value2 then return 0 end
         if value1 < value2 then return -1 end
         return 1
       end
 
       -- two different types; use collation order
-      local coll1 = kae.sort.type_order[type1]
-      local coll2 = kae.sort.type_order[type2]
+      local coll1 = kae.sort.type_order[type1] or kae.sort.type_order.max
+      local coll2 = kae.sort.type_order[type2] or kae.sort.type_order.max
+      if coll1 == nil then coll1 = 100 end
+      if coll2 == nil then coll2 = 100 end
       if coll1 < coll2 then return -1 end
       return 1
     end,
@@ -336,64 +414,29 @@ kae = {
     end,
 
     -- Convert a sort3 function to a normal Lua table.sort function
-    sort_cmp3 = function(cmp3_func)
+    from_cmp3 = function(cmp3_func)
       return function(left, right)
         return cmp3_func(left, right) < 0
       end
     end,
 
-    -- Reverse the given sort function
-    reverser = function(cmp_func)
+    -- Create a sort function that is the inverse of another sort function
+    reverse = function(cmp_func)
       return function(...)
         return not cmp_func(...)
       end
     end,
 
+    -- Create a sort3 function with reversed ordering
+    reverse3 = function(cmp3_func)
+      return function(...)
+        return -cmp3_func(...)
+      end
+    end,
+
   },
 
-  --[[ Generate a range of numbers from start..stop by step, inclusive ]]
-  range = function (...)
-    local args = {...}
-    local tbl = {
-      start = 1,
-      stop = 0,
-      step = 1
-    }
-    if #args == 1 then
-      tbl.stop = args[1]
-    elseif #args == 2 then
-      tbl.start = args[1]
-      tbl.stop = args[2]
-    elseif #args == 3 then
-      tbl.start = args[1]
-      tbl.stop = args[2]
-      tbl.step = args[3]
-      if tbl.step == 0 then
-        error("range(...) step must not be zero")
-      end
-    elseif #args > 3 then
-      error("too many arguments to range(...)")
-    else
-      error("too few arguments to range(...)")
-    end
-
-    local function next_func(itable, curr)
-      if itable.step > 0 then
-        if itable.start > itable.stop then return nil end
-        if curr == nil then return itable.start end
-        if curr + itable.step > itable.stop then return nil end
-      end
-      if itable.step < 0 then
-        if itable.start < itable.stop then return nil end
-        if curr == nil then return itable.start end
-        if curr + itable.step < itable.stop then return nil end
-      end
-      return curr + itable.step
-    end
-    return next_func, tbl, nil
-  end,
-  
-  -- Table functions
+  --[[ Table functions ]]
   table = {
 
     -- Portable version of table.unpack for LuaJIT
@@ -496,10 +539,10 @@ kae = {
       if conf.sort ~= false then
         local sortfunc = conf.sortfunc
         if not conf.sortfunc then
-          sortfunc = kae.sort.sort_cmp3(kae.sort.chain3("type", "name"))
+          sortfunc = kae.sort.from_cmp3(kae.sort.chain3("type", "name"))
         end
         if conf.reverse then
-          sortfunc = kae.sort.reverser(sortfunc)
+          sortfunc = kae.sort.reverse(sortfunc)
         end
         table.sort(temp, sortfunc)
       end
@@ -587,7 +630,7 @@ kae = {
     end,
   },
 
-  -- Table functions for operating on array-like tables
+  --[[ Table functions for operating on array-like tables ]]
   array = {
     -- Count the number of fields in an array-like table
     count = function(tbl)
@@ -624,6 +667,19 @@ kae = {
       return tbl1
     end,
 
+    -- Convert an array-like table to a string
+    tostring = function(tbl, conf)
+      local iconf = {}
+      if conf then kae.table.merge(iconf, conf) end
+      iconf.iprint = true
+      iconf.format = function(varname, index, val)
+        return ("%s[%s] = %s"):format(varname, index, val)
+      end
+      iconf.printfunc = function(value)
+        table.insert(result_lines, value)
+      end
+    end,
+
     -- Print an array-like table
     print = function(tbl, conf)
       local iconf = {}
@@ -636,9 +692,9 @@ kae = {
     end
   },
 
-  -- Functions that operate on (or assist with) strings
+  --[[ Functions that operate on (or assist with) strings ]]
   string = {
-    
+
     keywords = {
       "and", "break", "do", "else", "elseif", "end", "false", "for",
       "function", "if", "in", "local", "nil", "not", "or", "repeat",
@@ -719,7 +775,7 @@ kae = {
 
   },
 
-  -- Debugging utilities (WIP)
+  --[[ Debugging utilities (WIP) ]]
   debug = setmetatable({
     enable = false,
 
@@ -786,7 +842,7 @@ kae = {
     end
   }),
 
-  -- Operator table (WIP)
+  --[[ Operator table (WIP) ]]
   op = {
     eq = { n = 2, names = {"=="}, func = function(a, b) return a == b end },
     ne = { n = 2, names = {"~="}, func = function(a, b) return a ~= b end },
@@ -806,7 +862,7 @@ kae = {
     isnil = { n = 1, func = function(a) return a == nil end },
   },
 
-  -- Operator functions (WIP)
+  --[[ Operator functions (WIP) ]]
   operator = {
     -- Lookup an operator by key or by name. Returns an operator definition.
     lookup = function(opname)
@@ -832,12 +888,12 @@ kae = {
     end
   },
 
-  -- Alias to kae.operator.get
+  --[[ Alias to kae.operator.get ]]
   get_op = function(opname)
     return kae.operator.get(opname)
   end,
 
-  -- Testing functions (TODO)
+  --[[ Testing functions (WIP) ]]
   test = {
     assert = function(operator, value1, value2)
       local op = kae.get_op(operator)
@@ -846,7 +902,7 @@ kae = {
 }
 
 -- If terse mode is enabled, then set some shorthand variables
-if _G.libkae_terse then
+if rawget(_G, "libkae_terse") then
   _G.k = {}
   _G.k.t = kae.table
   _G.k.a = kae.array
@@ -854,12 +910,12 @@ if _G.libkae_terse then
   _G.k.o = kae.op
 end
 
--- Run the test suite if testing is enabled (TODO)
-if _G.libkae_do_test then
-  local log_asserts = _G.libkae_log or false
+-- Run the test suite if testing is enabled (TODO) {{{0
+if rawget(_G, "libkae_do_test") then
+  local log_asserts = rawget(_G, "libkae_log") or false
 
   local function test_log(msg)
-    if _G["libkae_test_log"] then
+    if rawget(_G, "libkae_test_log") then
       print(string.format("assert(%s) passed", msg))
     end
   end
@@ -917,10 +973,10 @@ if _G.libkae_do_test then
 
   function libkae_test()
     local saved_log = false
-    if _G["libkae_test_log"] then
+    if rawget(_G, "libkae_test_log") then
       saved_log = true
     end
-    local save_log = _G["libkae_test_log"]
+    local save_log = rawget(_G, "libkae_test_log")
     test.eq(1, 1)
     test.ne(1, 0)
     test.gt(1, 0)
@@ -956,7 +1012,7 @@ if _G.libkae_do_test then
     test.eq(3, 3)
   end
 
-end
+end -- End test suite 0}}}
 
 return kae
 
