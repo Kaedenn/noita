@@ -15,6 +15,7 @@ import glob
 import itertools
 import logging
 import os
+import textwrap
 
 import utility.collectionfuncs as cfuncs
 import utility.detail
@@ -441,27 +442,27 @@ def _main_list_mods(steam_path, appid, game_path, detail):
 
 def main():
   "Entry point"
-  ap = argparse.ArgumentParser(epilog=f"""
-The Noita directory is found via the following logic:
-  If --steam-appid is given, then look for the game with that appid.
-  Otherwise, look for the game in the directory given by --steam-game.
+  ap = argparse.ArgumentParser(epilog=textwrap.dedent(f"""
+  The Noita directory is found via the following logic:
+    If --steam-appid is given, then look for the game with that appid.
+    Otherwise, look for the game in the directory given by --steam-game.
 
-Use --steam to specify a different Steam installation directory.
+  Use --steam to specify a different Steam installation directory.
 
-Noita's Steam App ID is {noitalib.NOITA_APPID}.
+  Noita's Steam App ID is {noitalib.NOITA_APPID}.
 
--s,--session accepts the following:
-  YYYYMMDD to select all sessions played that day
-  YYYYMMDD-HHMISS to select a specific session by start date and time
-  Numeric world seed to select all sessions with that seed
-  "today" to select sessions played today
-  "last" to select the most recent session
+  -s,--session accepts the following:
+    YYYYMMDD to select all sessions played that day
+    YYYYMMDD-HHMISS to select a specific session by start date and time
+    Numeric world seed to select all sessions with that seed
+    "today" to select sessions played today
+    "last" to select the most recent session
 
---dump-i18n is equivalent to --dump-i18n=brief.
+  --dump-i18n is equivalent to --dump-i18n=brief.
 
-For --level, valid log levels are "T", "D", "I", "W", "E", and "F" for TRACE,
-DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
-""", formatter_class=argparse.RawDescriptionHelpFormatter)
+  For --level, valid log levels are "T", "D", "I", "W", "E", and "F" for TRACE,
+  DEBUG, INFO, WARNING, ERROR, and FATAL respectively.
+  """), formatter_class=argparse.RawDescriptionHelpFormatter)
   ag = ap.add_argument_group("Steam path overrides")
   ag.add_argument("--steam", metavar="PATH",
       default=steam.paths.get_steam_path(),
