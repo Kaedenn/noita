@@ -30,9 +30,9 @@ kae
     .count(table) -> number
     .has(table, key) -> boolean
     .iter(table, cmp_func=kae.sort.cmp3_name) -> iterable of key, value
-    .print(table, conf={})
+    .print(table, config={})
     .p = .print
-    .tostring(table, conf={}) -> string
+    .tostring(table, config={}) -> string
     .s = .tostring
   .array
     .count(table) -> number
@@ -40,7 +40,7 @@ kae
     .concat(table1, table2) -> table
     .extend(table1, table2) -> table
     .join(table, sep_string=",", value_format="%s") -> string
-    .print(table, conf={})
+    .print(table, config={})
   .string
     .keywords[index] -> string
     .is_keyword(keyword) -> boolean
@@ -216,17 +216,20 @@ kae.table.iter(table, cmp_func=kae.sort.cmp_name)
       return entry1.type < entry2.type
     end
 
-kae.table.print(table[, conf={}])
+kae.table.print(table[, config={}])
   Format and print a table. The following configuration options are
   available:
     KEY       TYPE        DEFAULT
+    --------- ----------- ---------------------------------------------
     name      string      "table"
     iprint    boolean     false
     printfunc function    print
     sort      boolean     true
     reverse   boolean     false
-    sortfunc  function    kae.sort.label_bytype
+    sortfunc  function    sort by type, then by name
     format    function    ("%s.%s = %s"):format(name, key, value)
+    table     boolean     false
+    type      string      nil
 
     TODO: NOT YET IMPLEMENTED
     recurse   boolean     false
@@ -234,7 +237,10 @@ kae.table.print(table[, conf={}])
     omit      table       values to omit; used for recursive tables
     omit_str  string      "..."
 
-kae.table.tostring(table[, conf={}])
+  config.type filters results to those having type(val) == config.type
+  config.table is shorthand for config.type = "table"
+
+kae.table.tostring(table[, config={}])
   Format a table as a string. The following configuration options are
   available:
     KEY       TYPE        DEFAULT
@@ -271,10 +277,10 @@ kae.array.join(table, sep_string=",", value_format=kae.formatter("%s"))
   argument, or a table with the "call" metamethod defined. Any other
   type will raise an error.
 
-kae.array.print(table, conf={})
+kae.array.print(table, config={})
   Call kae.table.print() with the following implicit configuration:
-    conf.iprint = true
-    conf.format = function(varname, index, value)
+    config.iprint = true
+    config.format = function(varname, index, value)
       return string.format("%s[%s] = %s", varname, index, value)
     end
 
@@ -632,8 +638,8 @@ kae = {
     end,
 
     -- Print a table
-    print = function(tbl, conf)
-      if not conf then conf = {} end
+    print = function(tbl, config)
+      local conf = config or {}
       local name = conf.name or "table"
       local pairfunc = conf.iprint and ipairs or pairs
       local printfunc = conf.printfunc or print
@@ -676,15 +682,18 @@ kae = {
     end,
 
     -- Convert a table to a string
-    tostring = function(tbl, conf)
-      if not conf then conf = {} end
+    tostring = function(tbl, config)
+      local conf = config or {}
       local entries = {}
-      local function add(entry) table.insert(entries, entry) end
 
       -- Invoke kae.table.print to handle the actual logic
       kae.table.print(tbl, kae.table.merge(conf, {
-        printfunc = function(entry) table.insert(entries, entry) end,
-        format = function(name, key, val) return {name, key, val} end
+        printfunc = function(entry)
+          table.insert(entries, entry)
+        end,
+        format = function(name, key, val)
+          return {name, key, val}
+        end
       }))
 
       local formatfunc = conf.format or function(name, key, value)
@@ -810,6 +819,14 @@ kae = {
       kae.table.print(tbl, iconf)
     end
   },
+
+  -- [[ True if tbl is an array (lacks holes, lacks named keys) ]]
+  is_array = function(tbl)
+    local tsize = #tbl
+    local tcount = kae.table.count(tbl)
+    local acount = kae.array.count(tbl)
+    return tsize == tcount and tcount == acount
+  end,
 
   --[[ Functions that operate on (or assist with) strings ]]
   string = {
