@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Common functions used by both of the mod copy scripts
+# Common functions used by both mod copy scripts
 
 # Environment variables:
 #   DRY_RUN         if non-empty, enter "dry run mode"
@@ -10,7 +10,6 @@
 #   STEAM           alternate path to the Steam root directory
 #   DELETE_BEFORE   if non-empty, rm -r $mod_dest prior to copying
 #   MOD_INCL_PATS   array; can be modified to force include named mods
-#   MOD_EXCL_PATS   array; can be modified to force exclude named mods
 #   INC_NODEST      for check_should_compare; always include mods that
 #                   exist in the source but not the destination
 
@@ -29,10 +28,10 @@ false; export F=$?
 
 # Always process these mods
 declare -a MOD_INCL_PATS=(
-  'shift_query'   # custom mod that lists fungal shifts
-  '^kae[_-]'      # all mods starting with 'kae_'
-  '^k[_-]'        # all mods starting with 'k_' or 'k-'
-  '[_-]k$'        # all mods ending with '_k' or '-k'
+  "shift_query"   # custom mod that lists fungal shifts
+  "kae_*"         # all mods starting with "kae_"
+  "k_*"           # all mods starting with "k_"
+  "*_k"           # all mods ending with "_k"
 )
 
 # Omit these specific mods
@@ -63,46 +62,16 @@ error() { # <message...>
   diag "$(color 1 31 ERROR)" "$@"
 }
 
-# Print a warning message to stderr
-warn() { # <message...>
-  diag "$(color 1 93 WARNING)" "$@"
-}
-
 # Print a debugging message to stderr if debugging is enabled
 log() { # <message...>
   if [[ -n "${NOITA_DEBUG:-}" ]]; then
-    diag "$(color 94 DEBUG)" "$@"
+    diag "$(color 3 96 DEBUG)" "$@"
   fi
 }
 
 # Print an informational message to stderr
 info() { # <message...>
-  diag "$(color 96 INFO)" "$@"
-}
-
-# Print a variable's value for debugging
-repr() { # <varname> [default]
-  if declare -p "$1" >/dev/null 2>&1; then
-    echo "$1=$(declare -p "$1" 2>&1 | sed -e 's/^[^=]*=//')"
-  else
-    echo "$1=${2:-unset}"
-  fi
-}
-
-# Print an array's contents, like repr does, but less noisy
-repr_array() { # <varname> [default]
-  if declare -p "$1" >/dev/null 2>&1; then
-    local -n ref="$1"
-    printf "%s[%d]=(" "$1" ${#ref[@]}
-    for ((i=0; i<${#ref[@]}; i+=1)); do
-      if [[ $i -ne 0 ]]; then printf " "; fi
-      printf '"%s"' "${ref[$i]}"
-    done
-    printf ")"
-  else
-    printf "%s[] unset" "$1"
-  fi
-  printf "\n"
+  diag "$(color 1 3 INFO)" "$@"
 }
 
 # Execute a command if DRY_RUN is unset, print the command otherwise
@@ -172,7 +141,7 @@ is_mod() { # <path>
 list_mods() { # <path>
   for modpath in "$1"/*/; do
     if is_mod "$modpath"; then
-      echo "$modpath" | sed -e 's/^\.\///' -e 's/\/$//'
+      echo "$modpath"
     fi
   done
 }
@@ -197,10 +166,10 @@ check_exclude_byname() {
   return $F
 }
 
-# Evaluates to true if we should copy the mod to the given directory.
-# Set INC_NODEST to a non-empty value to force including mods where
-# the destination does not exist (or is not a directory), regardless
-# of the mod's actual name.
+# Evaluates to true if we should copy the mod to the given directory
+# Set INC_NODEST to a non-empty value to force including mods
+# where the destination does not exist (or is not a directory),
+# regardless of the mod's actual name.
 check_should_compare() { # <src-path> <dest-root>
   local modname="$(basename "$1")"
   local destpath="$2/$modname"

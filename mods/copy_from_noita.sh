@@ -29,7 +29,7 @@ EOF
 }
 
 export LOCAL_DIR="$(dirname "$0")"
-while getopts "no:p:DCvVh" arg; do
+while getopts "nop:DCvVh" arg; do
   case "$arg" in
     h) print_help; exit 0;;
     V) export NOITA_TRACE=1;;
