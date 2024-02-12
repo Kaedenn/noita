@@ -8,6 +8,7 @@ and your sessions played.
 """
 
 # TODO: Color
+# TODO: Implement salakieli actions
 
 import argparse
 import datetime
@@ -16,6 +17,7 @@ import itertools
 import logging
 import os
 import textwrap
+import sys
 
 import utility.collectionfuncs as cfuncs
 import utility.detail
@@ -25,10 +27,18 @@ from utility.loghelper import LEVEL_CODES
 utility.loghelper.tracelog.hotpatch(logging)
 
 # pylint: disable=wrong-import-position
+import steam.paths
 import noitalib
 from noitalib.items import Kind as ItemKind
 from noitalib.translations import plural as Pl
-import steam.paths
+
+try:
+  from noitalib import salakieli
+  HAVE_SALAKIELI = True
+except ImportError as err:
+  sys.stderr.write(f"salakieli import failed; support disabled{os.extsep}")
+  sys.stderr.write(f"error: {err}{os.extsep}")
+  HAVE_SALAKIELI = False
 
 logging.basicConfig(
     format="%(name)s:%(lineno)s: %(levelname)s: %(message)s",
