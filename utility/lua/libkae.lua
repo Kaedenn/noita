@@ -1,6 +1,11 @@
---[[ Common functions for interactive Lua experimentation
+--[[ Common functions for interactive Lua experimentation ]]
 
--- STRUCTURE ----------------------------------------------------------
+--[[ FIXME:
+-- kae.table.print should reference kae.table.tostring (currently backwards)
+-- kae.array.print should reference kae.array.tostring (currently backwards)
+--]]
+
+--[[ MODULE STRUCTURE
 
 kae
   .range(start, stop, step) -> iterable of number
@@ -646,6 +651,7 @@ kae = {
       local formatfunc = conf.format or function(varname, key, val)
         return string.format("%s.%s = %s", varname, key, val)
       end
+
       local temp = {}
       for key, val in pairfunc(tbl) do
         table.insert(temp, {name=key, type=type(val), value=val})
@@ -661,11 +667,15 @@ kae = {
         table.sort(temp, sortfunc)
       end
       for idx, entry in pairs(temp) do
+        local vtype = entry.type
         local key = entry.name
         local val = entry.value
+        if conf.recurse and vtype == "table" then
+          val = ("[%s]"):format(kae.table.tostring(val, conf))
+        end
         local show = true
-        if conf.table and type(val) ~= "table" then show = false end
-        if conf.type and type(val) ~= conf.type then show = false end
+        if conf.table and vtype ~= "table" then show = false end
+        if conf.type and vtype ~= conf.type then show = false end
         if show then
           printfunc(formatfunc(name, key, val))
         end
@@ -707,7 +717,6 @@ kae = {
       -- Determine per-line formatting values
       local indent = conf.indent or ""
       local sep = conf.sep or ","
-      local linesep = conf.linesep or " "
 
       -- Build an array of lines
       local lines = {}
@@ -817,7 +826,61 @@ kae = {
         return string.format("%s[%s] = %s", varname, index, val)
       end
       kae.table.print(tbl, iconf)
-    end
+    end,
+
+    -- Convert an array-like table of values to a single string
+    tostring = function(tbl, conf)
+      if not conf then conf = {} end
+      local iconf = {}
+      kae.table.merge(iconf, conf)
+      local entries = {}
+      iconf.iprint = true
+      iconf.printfunc = function(entry) table.insert(entries, entry) end
+      iconf.format = function(varname, index, val)
+        return {varname, index, val}
+      end
+      iconf.sortfunc = function(val1, val2)
+        return val1.name < val2.name
+      end
+
+      kae.table.print(tbl, iconf)
+
+      local formatfunc = conf.format or function(name, key, value)
+        local valstr = tostring(value)
+        if type(value) == "string" then
+          valstr = ("%q"):format(value)
+        end
+        return valstr
+      end
+
+      local indent = conf.indent or ""
+      local sep = conf.sep or ","
+
+      local lines = {}
+      for enr, entry in ipairs(entries) do
+        local varname = entry[1]
+        local tkey = entry[2]
+        local tvalue = entry[3]
+        local curr_sep = sep
+        if enr == #entries and not conf.sep_last then
+          curr_sep = ""
+        end
+        local line = ("%s%s%s"):format(
+          indent,
+          formatfunc(varname, tkey, tvalue),
+          curr_sep
+        )
+        table.insert(lines, line)
+      end
+
+      local afix_sep = conf.linesep or ""
+      return ("%s%s%s%s%s"):format(
+        conf.prefix or "{",
+        afix_sep,
+        table.concat(lines, conf.linesep or " "),
+        afix_sep,
+        conf.suffix or "}")
+    end,
   },
 
   -- [[ True if tbl is an array (lacks holes, lacks named keys) ]]
