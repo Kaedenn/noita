@@ -1,11 +1,6 @@
---[[ Common functions for interactive Lua experimentation ]]
+--[[ Common functions for interactive Lua experimentation
 
---[[ FIXME:
--- kae.table.print should reference kae.table.tostring (currently backwards)
--- kae.array.print should reference kae.array.tostring (currently backwards)
---]]
-
---[[ MODULE STRUCTURE
+-- STRUCTURE ----------------------------------------------------------
 
 kae
   .range(start, stop, step) -> iterable of number
@@ -343,6 +338,21 @@ TODO
 
 kae = {
 
+  config = {
+    printfunc = print,
+    table_format = function(varname, key, value)
+      return ("%s.%s = %s"):format(varname, key, value)
+    end,
+    array_format = function(varname, index, value)
+      return ("%s[%d] = %s"):format(varname, index, value)
+    end,
+  },
+
+  --[[ Apply configuration that alters default behavior below ]]
+  configure = function (name, value)
+    kae.config[name] = value
+  end,
+
   --[[ Generate a range of numbers from start..stop by step, inclusive ]]
   range = function (...)
     local args = kae.table.pack(...)
@@ -606,7 +616,7 @@ kae = {
 
     -- True if the table contains the given key, regardless of value
     has = function(tbl, key)
-      for table_key, _ in pairs(tb) do
+      for table_key, _ in pairs(tbl) do
         if table_key == key then
           return true
         end
@@ -647,11 +657,8 @@ kae = {
       local conf = config or {}
       local name = conf.name or "table"
       local pairfunc = conf.iprint and ipairs or pairs
-      local printfunc = conf.printfunc or print
-      local formatfunc = conf.format or function(varname, key, val)
-        return string.format("%s.%s = %s", varname, key, val)
-      end
-
+      local printfunc = conf.printfunc or kae.config.printfunc
+      local formatfunc = conf.format or kae.config.table_format
       local temp = {}
       for key, val in pairfunc(tbl) do
         table.insert(temp, {name=key, type=type(val), value=val})
@@ -717,6 +724,7 @@ kae = {
       -- Determine per-line formatting values
       local indent = conf.indent or ""
       local sep = conf.sep or ","
+      local linesep = conf.linesep or " "
 
       -- Build an array of lines
       local lines = {}
@@ -933,7 +941,7 @@ kae = {
     -- Escape a string
     escape = function(value, quote)
       if quote == nil then quote = '"' end
-      if is_keyword(value) then
+      if kae.string.is_keyword(value) then
         return ("%s%s%s"):format(quote, value, quote)
       end
       local escaped_chars = {}
@@ -964,12 +972,13 @@ kae = {
 
     -- True if the string contains only printable characters
     isprint = function(value)
+      local result = true
       for index, byte in kae.string.each(value, true) do
         if byte < 0x32 or byte >= 0x7f then
-          return false
+          result = false
         end
-        return true
       end
+      return result
     end,
 
   },
@@ -989,10 +998,10 @@ kae = {
     parse_frame = function(line)
       local file_line, func = line:match("^[%s]+(.*): in (.*)")
       if file_line and func then
-        local file, line = file_line:match("(.*):([%d]+)")
+        local file, linenr = file_line:match("(.*):([%d]+)")
         file = file or file_line
-        line = line or ""
-        return {file, line, func}
+        linenr = linenr or ""
+        return {file, linenr, func}
       end
       return nil
     end,
@@ -1006,8 +1015,8 @@ kae = {
           if line:gmatch("stack traceback:") then
             block = 1
           else -- error message
-            local file, line, msg = line:match("([^:]+):([%d]+): (.*)")
-            table.insert(errors, {file, line, msg})
+            local file, line_nr, msg = line:match("([^:]+):([%d]+): (.*)")
+            table.insert(errors, {file, line_nr, msg})
           end
         else -- stack frame
           table.insert(frames, kae.debug.parse_frame(line))
