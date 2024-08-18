@@ -29,7 +29,7 @@ while getopts "cIi:vh" opt; do
     i) IGNORE+=("$OPTARG");;
     v) set -x;;
     h) cat <<EOF >&2
-usage: $0 [-c CONF] [-I] [-i NUM] [-v] [-h] [-- args...]
+usage: $0 [-c CONF] [-I] [-i NUM] [-v] [-h] files... args...
 
 options:
     -c CONF   path to config file (default $CONFIG)
@@ -38,7 +38,7 @@ options:
     -v        enable debugging
     -h        print this message and exit
 
-All arguments after -- are passed to luacheck.
+All arguments after the first filename are passed to luacheck.
 EOF
        exit 0;;
   esac
