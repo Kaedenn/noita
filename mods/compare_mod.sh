@@ -77,3 +77,4 @@ if [[ $? -ne 0 ]]; then
   echo "Differences detected" >&2
 fi
 
+# vim: set ts=2 sts=2 sw=2:
