@@ -3,7 +3,9 @@
 CONF="$HOME/.local/share/Steam/steamapps/common/Noita/tools_modding/luacheck_config.lua"
 BASE="$(dirname "$0")"
 
-if [[ -e "$BASE/../utility/lua/luacheck_config.lua" ]]; then
+if [[ -e "$PWD/.luacheckrc" ]]; then
+  CONF="$PWD/.luacheckrc"
+elif [[ -e "$BASE/../utility/lua/luacheck_config.lua" ]]; then
   CONF="$BASE/../utility/lua/luacheck_config.lua"
 fi
 
