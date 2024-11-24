@@ -32,12 +32,12 @@ done
 shift $((OPTIND-1))
 
 if [[ -z "$NODEFAULT" ]]; then
-  DIFFARGS+=(-x Makefile.sh)
   DIFFARGS+=(-x "*.tar.gz")
   DIFFARGS+=(-x .git -x .gitignore)
   DIFFARGS+=(-x ref -x build -x workshop)
   DIFFARGS+=(-x workshop_id.txt -x workshop.xml -x workshop_preview_image.png)
   DIFFARGS+=(-x README.md)
+  DIFFARGS+=(-x "*.sh" -x "*.swp")
 fi
 
 debug() {
