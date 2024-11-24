@@ -24,9 +24,10 @@ declare -a IGNORE=(
 
 declare -a lua_args=()
 
-while getopts "cIi:vh" opt; do
+while getopts "cCIi:vh" opt; do
   case "$opt" in
     c) CONF="$OPTARG";;
+    C) lua_args+=('--no-color');;
     I) IGNORE=();;
     i) IGNORE+=("$OPTARG");;
     v) set -x;;
@@ -35,6 +36,7 @@ usage: $0 [-c CONF] [-I] [-i NUM] [-v] [-h] files... args...
 
 options:
     -c CONF   path to config file (default $CONFIG)
+    -C        disable colors
     -I        clear error ignore list (default ${IGNORE[@]})
     -i NUM    add NUM to the error ignore list
     -v        enable debugging
